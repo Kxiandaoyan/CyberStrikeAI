@@ -44,9 +44,26 @@ func applyExperienceDraft(skillsDir, corpusDir string, km *knowledge.Manager, d 
 	}
 
 	if strings.HasPrefix(target, "poc:") {
-		cveID := strings.ToUpper(strings.TrimSpace(strings.TrimPrefix(target, "poc:")))
-		if !cveIDPatternForPath.MatchString(cveID) {
-			return "", fmt.Errorf("invalid POC target %q — must be poc:CVE-YYYY-NNNN", appliedTo)
+		rawKey := strings.TrimSpace(strings.TrimPrefix(target, "poc:"))
+		if rawKey == "" {
+			return "", fmt.Errorf("invalid POC target %q — must be poc:CVE-YYYY-NNNN or poc:<系统名+漏洞类型>", appliedTo)
+		}
+		isCVE := false
+		// CVE-tagged keys keep their canonical uppercase id form.
+		if upper := strings.ToUpper(rawKey); cveIDPatternForPath.MatchString(upper) {
+			rawKey = upper
+			isCVE = true
+		} else {
+			// No-CVE exploits (logic flaws, unauthorized access, custom systems)
+			// key on the sanitized vulnerability title. Raw keys carrying path
+			// separators / traversal are rejected loudly (caller or human error).
+			if strings.ContainsAny(rawKey, "/\\") || strings.Contains(rawKey, "..") {
+				return "", fmt.Errorf("invalid POC key %q — path separators/traversal not allowed", appliedTo)
+			}
+			rawKey = experience.SanitizePocKey(rawKey)
+			if rawKey == "" {
+				return "", fmt.Errorf("invalid POC target %q — key sanitizes to empty", appliedTo)
+			}
 		}
 		if corpusDir == "" {
 			return "", fmt.Errorf("corpus dir not configured — cannot write POC library")
@@ -55,7 +72,7 @@ func applyExperienceDraft(skillsDir, corpusDir string, km *knowledge.Manager, d 
 		if err := os.MkdirAll(pocDir, 0755); err != nil {
 			return "", err
 		}
-		pocPath := filepath.Join(pocDir, cveID+".md")
+		pocPath := filepath.Join(pocDir, rawKey+".md")
 		section := fmt.Sprintf("\n\n## 实战补记（%s）\n\n%s\n", time.Now().Format("2006-01-02"), d.Content)
 
 		if data, err := os.ReadFile(pocPath); err == nil && len(data) > 0 {
@@ -69,9 +86,13 @@ func applyExperienceDraft(skillsDir, corpusDir string, km *knowledge.Manager, d 
 			}
 			return pocPath, nil
 		}
-		content := fmt.Sprintf("---\ncve: %s\nadded: %s\n---\n\n# %s 实战利用记录\n%s",
-			cveID, time.Now().Format("2006-01-02"), cveID, section)
-		if err := os.WriteFile(pocPath, []byte(content), 0644); err != nil {
+		head := fmt.Sprintf("---\nadded: %s\n---\n\n# %s 实战利用记录\n%s",
+			time.Now().Format("2006-01-02"), rawKey, section)
+		if isCVE {
+			head = fmt.Sprintf("---\ncve: %s\nadded: %s\n---\n\n# %s 实战利用记录\n%s",
+				rawKey, time.Now().Format("2006-01-02"), rawKey, section)
+		}
+		if err := os.WriteFile(pocPath, []byte(head), 0644); err != nil {
 			return "", err
 		}
 		return pocPath, nil

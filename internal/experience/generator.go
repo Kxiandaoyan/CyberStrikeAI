@@ -291,12 +291,38 @@ func redact(s string) string {
 // cveIDPattern extracts a CVE id from free text (vuln title/description/steps).
 var cveIDPattern = regexp.MustCompile(`\bCVE-\d{4}-\d{4,}\b`)
 
-// collectPocDrafts emits one POC entry per confirmed vulnerability that maps
-// to a CVE id. Default mode (poc_auto_apply, on unless disabled): the entry is
-// written straight into the local POC library — the draft row is still created
-// and immediately marked approved (reviewer="auto") so the operator can see
-// exactly what landed, and one-shot dedup still applies. If auto-write fails
-// (or poc_auto_apply=false) the row stays a normal draft for human approval.
+// pocUnsafeKeyChars: path separators / traversal / FS-illegal characters.
+var pocUnsafeKeyChars = regexp.MustCompile(`[\\/:*?"<>|\r\n\t]`)
+
+// SanitizePocKey turns a free-text key (a no-CVE vulnerability title such as
+// 「某OA系统 getfile 任意文件读取」) into a safe single poc/ filename stem.
+// Chinese and common punctuation survive; separators and traversal are
+// stripped so the result can never escape the poc directory.
+func SanitizePocKey(s string) string {
+	s = pocUnsafeKeyChars.ReplaceAllString(strings.TrimSpace(s), " ")
+	s = strings.Join(strings.Fields(s), "-")
+	s = strings.Trim(s, "-.")
+	if s == "" {
+		return ""
+	}
+	r := []rune(s)
+	if len(r) > 60 {
+		s = string(r[:60])
+	}
+	return s
+}
+
+// collectPocDrafts emits one POC entry per CONFIRMED vulnerability — CVE or
+// not. CVE-tagged entries key on the id (poc/CVE-YYYY-NNNN.md); no-CVE ones
+// (logic flaws, unauthorized access, weak creds, custom systems) key on the
+// sanitized vulnerability title「系统名+漏洞类型」, so a custom system taken
+// down without any CVE still lands in the library and repeats accumulate as
+// dated sections. Default mode (poc_auto_apply, on unless disabled): entries
+// are written straight into the local POC library — the draft row is still
+// created and immediately marked approved (reviewer="auto") so the operator
+// can see exactly what landed, and one-shot dedup still applies. If
+// auto-write fails (or poc_auto_apply=false) the row stays a normal draft
+// for human approval.
 func (g *Generator) collectPocDrafts(projectIDs map[string]bool) {
 	auto := g.cfg.Experience.PocAutoApplyEffective() && g.autoApplier != nil
 	for pid := range projectIDs {
@@ -306,24 +332,33 @@ func (g *Generator) collectPocDrafts(projectIDs map[string]bool) {
 			continue
 		}
 		for _, v := range vulns {
-			if v == nil {
+			if v == nil || strings.TrimSpace(v.Title) == "" {
 				continue
 			}
+			// 检索键：有 CVE 用编号；没有则用「系统名+漏洞类型」（标题清洗）。
 			cve := firstCVEID(v.Title, v.Description, v.ReproSteps)
-			if cve == "" {
-				continue
+			key := cve
+			if key == "" {
+				key = SanitizePocKey(v.Title)
+				if key == "" {
+					continue
+				}
 			}
 			exists, err := DraftExistsBySource(g.db.DB, "poc", v.ID)
 			if err != nil || exists {
 				continue // one entry per vulnerability ever (rejected = stay rejected)
 			}
-			fk, _ := json.Marshal([]string{cve})
+			fkTags := []string{}
+			if cve != "" {
+				fkTags = append(fkTags, cve)
+			}
+			fk, _ := json.Marshal(fkTags)
 			d := &Draft{
 				ProjectID:  pid,
 				Source:     v.ID,
 				SourceType: "poc",
-				Title:      "POC " + cve + " — " + firstRunes(v.Title, 60),
-				Content:    buildPocDraftContent(v, cve, !auto),
+				Title:      "POC " + key + " — " + firstRunes(v.Title, 60),
+				Content:    buildPocDraftContent(v, cve, key, !auto),
 				Category:   "poc",
 				FactKeys:   string(fk),
 			}
@@ -333,17 +368,17 @@ func (g *Generator) collectPocDrafts(projectIDs map[string]bool) {
 				continue
 			}
 			if auto {
-				if dest, aerr := g.autoApplier(d, "poc:"+cve); aerr == nil {
+				if dest, aerr := g.autoApplier(d, "poc:"+key); aerr == nil {
 					if uerr := ApproveDraft(g.db.DB, id, "auto", dest); uerr == nil {
-						g.logger.Infow("poc auto-applied", "cve", cve, "vuln", v.ID, "dest", dest)
+						g.logger.Infow("poc auto-applied", "key", key, "vuln", v.ID, "dest", dest)
 						continue
 					}
 				} else {
 					g.logger.Warnw("poc auto-apply failed — left for human approval",
-						"cve", cve, "vuln", v.ID, "error", aerr)
+						"key", key, "vuln", v.ID, "error", aerr)
 				}
 			}
-			g.logger.Infow("poc draft created (pending review)", "cve", cve, "vuln", v.ID)
+			g.logger.Infow("poc draft created (pending review)", "key", key, "vuln", v.ID)
 		}
 	}
 }
@@ -360,18 +395,21 @@ func firstCVEID(fields ...string) string {
 
 // buildPocDraftContent assembles the POC record from the vulnerability
 // fields verbatim (IPv4-redacted). No LLM rewrite: commands and payloads
-// must survive byte-for-byte. manual=true (human-review mode) prefixes the
-// approve guidance; auto mode notes it has already been written.
-func buildPocDraftContent(v *database.Vulnerability, cve string, manual bool) string {
+// must survive byte-for-byte. cve may be empty (no-CVE exploits key on the
+// title). manual=true (human-review mode) prefixes the approve guidance;
+// auto mode notes it has already been written.
+func buildPocDraftContent(v *database.Vulnerability, cve, key string, manual bool) string {
 	var b strings.Builder
 	if manual {
-		b.WriteString("> POC 沉淀草稿：批准时 applied_to 填 `poc:" + cve + "`，将写入本地实战库 data/corpus/poc/。\n")
+		b.WriteString("> POC 沉淀草稿：批准时 applied_to 填 `poc:" + key + "`，将写入本地实战库 data/corpus/poc/。\n")
 		b.WriteString("> 内容机械摘自漏洞记录并已做 IPv4 脱敏；目标域名/路径/凭据是否保留请人工过目后再批准。\n\n")
 	} else {
-		b.WriteString("> 已自动写入本地实战库 data/corpus/poc/" + cve + ".md（poc_auto_apply 默认开启）。\n")
+		b.WriteString("> 已自动写入本地实战库 data/corpus/poc/" + key + ".md（poc_auto_apply 默认开启）。\n")
 		b.WriteString("> 内容机械摘自漏洞记录并已做 IPv4 脱敏。此记录仅存本机，不出公开仓库、不被每日同步覆盖。\n\n")
 	}
-	fmt.Fprintf(&b, "- CVE: %s\n", cve)
+	if cve != "" {
+		fmt.Fprintf(&b, "- CVE: %s\n", cve)
+	}
 	fmt.Fprintf(&b, "- 标题: %s\n", v.Title)
 	fmt.Fprintf(&b, "- 类型 / 严重度: %s / %s\n", v.Type, v.Severity)
 	if v.Target != "" {

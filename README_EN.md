@@ -54,15 +54,17 @@ coverage also backfills history beyond the 5-year corpus window.
    count gates (≥80% total, per-year floor), 3am daily + 36h catch-up, manual
    `POST /api/cve-corpus/sync?full=1`.
 3. **Combat POC accumulation (the "faster over time" core, auto by default)** — after a
-   confirmed, CVE-tagged vulnerability, closeout mechanically assembles the POC from the
+   confirmed vulnerability, closeout mechanically assembles the POC from the
    vulnerability record (reproduction steps verbatim, no LLM rewrite, IPv4-redacted; one
-   entry per vulnerability ever) and **writes it straight into
-   `data/corpus/poc/CVE-YYYY-NNNN.md`** — repeated engagements append dated sections.
-   `poc_auto_apply` is on by default; set it to false to route POCs through the human
-   approval queue instead. Every auto-write leaves a visible trace on the drafts page
-   (reviewer=auto, full content). The daily sync never touches the POC layer; `data/` is
-   git-ignored so combat records never reach the public repo. Next engagement:
-   `fts + globs:["poc/**"]` pulls the recipe directly.
+   entry per vulnerability ever) and **writes it straight into `data/corpus/poc/`** —
+   repeated engagements append dated sections. `poc_auto_apply` is on by default; set it
+   to false to route POCs through the human approval queue instead. **Exploits without a
+   CVE id are captured too**: logic flaws, unauthorized access, weak creds and custom
+   systems are keyed by「system + vuln type」with the target URL/system name in the body,
+   so a semantic query finds them next time. Every auto-write leaves a visible trace on
+   the drafts page (reviewer=auto, full content). The daily sync never touches the POC
+   layer; `data/` is git-ignored so combat records never reach the public repo. Next
+   engagement: `fts/semantic + globs:["poc/**"]` pulls the recipe directly.
 - **Third-party POC collections can be imported** (wiki-style repos mostly named
   「component + vuln type」, often without CVE ids):
   `python tools/import_poc_repo.py <cloned repo> data/corpus/poc --source-name <origin>`
