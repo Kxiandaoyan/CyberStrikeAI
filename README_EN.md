@@ -49,6 +49,11 @@ coverage also backfills history beyond the 5-year corpus window.
    incremental indexing) plus a paginated browse API and UI page. Component identification
    now hits the local corpus first (`local-corpus-cve` skill); external sequences run only
    when local hits are insufficient, and then target the CVE-ID directly.
+   Three layers: `cve/` official (daily sync), `poc/` combat (see #3), and
+   **`pocindex/` — a public-PoC-repo index** split from
+   [PocOrExp_in_Github](https://github.com/ycdxsb/PocOrExp_in_Github) (~12k CVEs, one md
+   each, refresh by re-running `tools/import_pocindex.py`). When the combat layer misses,
+   one local lookup returns direct PoC repo URLs — no GitHub searching needed.
 2. **Daily incremental CVE sync (cvesync)** — pure-HTTP GitHub delta (commits + compare API,
    no git subprocess); an honest watermark (state advances only after every change lands),
    count gates (≥80% total, per-year floor), 3am daily + 36h catch-up, manual

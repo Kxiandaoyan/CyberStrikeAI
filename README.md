@@ -46,6 +46,11 @@ CVE 库 → 搜索引擎×3 → 中文社区 → GitHub 搜 PoC → 资产引擎
 - 另有分页浏览 / 搜索 API（`GET /api/cve-corpus/search`）与前端 CVE 检索页。
 - 配套 Skill：`local-corpus-cve`（何时用 / 何时不用 / 怎么调），组件识别后的第一跳是**本地语料**，
   本地不足再走外网序列（`component-vuln-intel` 已改为本地优先，命中后外网按 CVE-ID 定向搜）。
+- 语料仓分三层：`cve/` 官方层（每日同步）、`poc/` 实战层（见第 3 节）、
+  **`pocindex/` 公开 PoC 索引层** —— 把 [PocOrExp_in_Github](https://github.com/ycdxsb/PocOrExp_in_Github)
+  （每日聚合「CVE → 公开 GitHub PoC 仓库」）拆分为每 CVE 一个 md（约 1.2 万条）：
+  `git clone --depth 1 <repo> /tmp/x && python tools/import_pocindex.py /tmp/x data/corpus/pocindex`
+  重跑即刷新（上游为唯一事实源）。实战层没有的 CVE，本地一查即得公开 PoC 仓库链接，连 GitHub 搜索都省了。
 
 ### 2. CVE 每日增量同步（cvesync）
 - 纯 HTTP 的 GitHub 增量：commits + compare API 分批拿变更文件，只重抽变更项为 md；
