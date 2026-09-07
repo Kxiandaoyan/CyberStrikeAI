@@ -797,13 +797,26 @@ func (h *AgentHandler) runRobotEinoSingleWithRetry(
 	assistantMessageID string,
 	taskStatus *string,
 ) (string, string, error) {
+	curMsg := finalMessage
+	curHist := history
+	var handshakeContinueAttempt int
 	resultMA, errMA := multiagent.RunEinoSingleChatModelAgent(
 		taskCtx, h.config, &h.config.MultiAgent, h.agent, h.db, h.logger,
-		conversationID, h.conversationProjectID(conversationID), finalMessage, history, roleTools, progressCallback, nil, h.agentSessionContextBlock(conversationID),
+		conversationID, h.conversationProjectID(conversationID), curMsg, curHist, roleTools, progressCallback, nil, h.agentSessionContextBlock(conversationID),
 	)
 	if errMA != nil {
 		*taskStatus = "failed"
 		return h.finalizeRobotAgentError(taskCtx, assistantMessageID, conversationID, resultMA, errMA)
+	}
+	if h.tryContinueOnHandshakePending(conversationID, resultMA, &handshakeContinueAttempt, &curHist, &curMsg, progressCallback) {
+		resultMA, errMA = multiagent.RunEinoSingleChatModelAgent(
+			taskCtx, h.config, &h.config.MultiAgent, h.agent, h.db, h.logger,
+			conversationID, h.conversationProjectID(conversationID), curMsg, curHist, roleTools, progressCallback, nil, h.agentSessionContextBlock(conversationID),
+		)
+		if errMA != nil {
+			*taskStatus = "failed"
+			return h.finalizeRobotAgentError(taskCtx, assistantMessageID, conversationID, resultMA, errMA)
+		}
 	}
 	return h.finalizeRobotAgentSuccess(taskCtx, assistantMessageID, conversationID, resultMA)
 }
@@ -817,14 +830,28 @@ func (h *AgentHandler) runRobotMultiAgentWithRetry(
 	assistantMessageID string,
 	taskStatus *string,
 ) (string, string, error) {
+	curMsg := finalMessage
+	curHist := history
+	var handshakeContinueAttempt int
 	resultMA, errMA := multiagent.RunDeepAgent(
 		taskCtx, h.config, &h.config.MultiAgent, h.agent, h.db, h.logger,
-		conversationID, h.conversationProjectID(conversationID), finalMessage, history, roleTools, progressCallback,
+		conversationID, h.conversationProjectID(conversationID), curMsg, curHist, roleTools, progressCallback,
 		h.agentsMarkdownDir, orchestration, nil, h.agentSessionContextBlock(conversationID),
 	)
 	if errMA != nil {
 		*taskStatus = "failed"
 		return h.finalizeRobotAgentError(taskCtx, assistantMessageID, conversationID, resultMA, errMA)
+	}
+	if h.tryContinueOnHandshakePending(conversationID, resultMA, &handshakeContinueAttempt, &curHist, &curMsg, progressCallback) {
+		resultMA, errMA = multiagent.RunDeepAgent(
+			taskCtx, h.config, &h.config.MultiAgent, h.agent, h.db, h.logger,
+			conversationID, h.conversationProjectID(conversationID), curMsg, curHist, roleTools, progressCallback,
+			h.agentsMarkdownDir, orchestration, nil, h.agentSessionContextBlock(conversationID),
+		)
+		if errMA != nil {
+			*taskStatus = "failed"
+			return h.finalizeRobotAgentError(taskCtx, assistantMessageID, conversationID, resultMA, errMA)
+		}
 	}
 	return h.finalizeRobotAgentSuccess(taskCtx, assistantMessageID, conversationID, resultMA)
 }

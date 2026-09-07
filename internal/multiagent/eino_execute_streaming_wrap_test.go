@@ -502,4 +502,7 @@ func TestEinoShouldForgeVerifyDNS(t *testing.T) {
 	if einoShouldForgeVerifyDNS(fmt.Errorf("shell inactivity timeout (30s)")) {
 		t.Fatal("空闲超时不应伪造")
 	}
+	if einoShouldForgeVerifyDNS(fmt.Errorf("signal: killed"), context.Canceled) {
+		t.Fatal("signal killed + ctx 取消不应伪造")
+	}
 }

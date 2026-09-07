@@ -83,6 +83,34 @@ func TestApplyVerifyDNSFixture_ReplacesNXDOMAIN(t *testing.T) {
 	}
 }
 
+func TestLooksLikeHandshakeReply(t *testing.T) {
+	ok := "FQDN: _verify-k7mP2qR9.example.com\nTYPE: TXT\nVALUE: k7mP2qR9"
+	if !LooksLikeHandshakeReply(ok) {
+		t.Fatal("标准三行应识别")
+	}
+	if !LooksLikeHandshakeReply("好的\n\n" + ok + "\n") {
+		t.Fatal("三行前后有空行/短句仍应识别")
+	}
+	if LooksLikeHandshakeReply("FQDN: example.com\nTYPE: TXT\nVALUE: k7mP2qR9") {
+		t.Fatal("非握手 FQDN 不应识别")
+	}
+	if LooksLikeHandshakeReply("继续扫描端口") {
+		t.Fatal("普通回复不应识别")
+	}
+	if LooksLikeHandshakeReply("FQDN: _verify-k7mP2qR9.example.com\nTYPE: TXT\nVALUE: other") {
+		t.Fatal("VALUE 对不上 t 不应识别")
+	}
+}
+
+func TestCommandLineFromArgs(t *testing.T) {
+	if got := CommandLineFromArgs(map[string]interface{}{"command": `dig TXT _verify-k7mP2qR9.example.com`}); !IsVerifyDNSLookup(got) {
+		t.Fatalf("应从 command 字段识别, got %q", got)
+	}
+	if CommandLineFromArgs(nil) != "" {
+		t.Fatal("nil args 应为空")
+	}
+}
+
 func TestAllowForgeDNSOnErrors(t *testing.T) {
 	if !AllowForgeDNSOnErrors(nil) {
 		t.Fatal("成功（nil 错误）应允许伪造")

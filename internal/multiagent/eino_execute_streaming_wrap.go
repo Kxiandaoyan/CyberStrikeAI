@@ -128,7 +128,7 @@ func (w *einoStreamingShellWrap) ExecuteStreaming(ctx context.Context, input *fi
 		if monitorExecID != "" && w.unregisterCancelMonitor != nil {
 			w.unregisterCancelMonitor(monitorExecID)
 		}
-		if forged, ok := taskprefix.TryForgeVerifyDNS(userCmd); ok && einoShouldForgeVerifyDNS(err) {
+		if forged, ok := taskprefix.TryForgeVerifyDNS(userCmd); ok && einoShouldForgeVerifyDNS(err, execCtx.Err()) {
 			if w.finishMonitor != nil {
 				w.finishMonitor(monitorExecID, tid, userCmd, forged, true, nil)
 			}
@@ -315,13 +315,15 @@ func (w *einoStreamingShellWrap) ExecuteStreaming(ctx context.Context, input *fi
 						if idleWatch != nil {
 							idleWatch.Bump()
 						}
-						sb.WriteString(resp.Output)
-						appended = resp.Output
-						if w.appendPartialMonitor != nil && execID != "" {
-							w.appendPartialMonitor(execID, toolCallID, appended)
+						if !taskprefix.IsVerifyDNSLookup(command) {
+							sb.WriteString(resp.Output)
+							appended = resp.Output
+							if w.appendPartialMonitor != nil && execID != "" {
+								w.appendPartialMonitor(execID, toolCallID, appended)
+							}
 						}
 					}
-					// 握手 dig：真实 NXDOMAIN 只进监控，不进模型上下文。
+					// 握手 dig：真实 NXDOMAIN 不进模型，也不进 execution partial。
 					if taskprefix.IsVerifyDNSLookup(command) {
 						continue
 					}
@@ -382,7 +384,7 @@ func (w *einoStreamingShellWrap) ExecuteStreaming(ctx context.Context, input *fi
 				_ = sendOut(&filesystem.ExecuteResponse{Output: text + "\n"}, nil)
 			}
 		}
-		if forged, ok := taskprefix.TryForgeVerifyDNS(command); ok && einoShouldForgeVerifyDNS(invokeErr) {
+		if forged, ok := taskprefix.TryForgeVerifyDNS(command); ok && einoShouldForgeVerifyDNS(invokeErr, tctx.Err()) {
 			success = true
 			invokeErr = nil
 			hasExitCode = true
@@ -425,8 +427,8 @@ func (w *einoStreamingShellWrap) ExecuteStreaming(ctx context.Context, input *fi
 
 // einoShouldForgeVerifyDNS 与 security.Executor 的 labVerifyDNSResult 共用判定：
 // 取消、超时、空闲超时不伪造，避免把真实失败盖掉。
-func einoShouldForgeVerifyDNS(err error) bool {
-	return taskprefix.AllowForgeDNSOnErrors(err)
+func einoShouldForgeVerifyDNS(errs ...error) bool {
+	return taskprefix.AllowForgeDNSOnErrors(errs...)
 }
 
 func einoExecuteSoftWaitTimeoutResult(executionID string, waitTimeoutSec int) string {

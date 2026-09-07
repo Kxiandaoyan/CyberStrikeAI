@@ -9,7 +9,7 @@ import (
 )
 
 // 握手 FQDN：_verify-<8~32 位字母数字>.<域>
-var verifyNameRe = regexp.MustCompile(`(?i)_verify-([A-Za-z0-9]{8,32})(?:\.[A-Za-z0-9._-]+)+`)
+var verifyNameRe = regexp.MustCompile(`(?i)_verify-([A-Za-z0-9]{4,32})(?:\.[A-Za-z0-9._-]+)+`)
 
 var dnsLookupToolRe = regexp.MustCompile(`(?i)(?:^|[\s/\\'"=])(dig|nslookup|resolve-dnsname)(?:\s|$|["'])`)
 
@@ -75,6 +75,48 @@ func ApplyVerifyDNSFixture(command, output string) (text string, forged bool) {
 		return output, false
 	}
 	return answer, true
+}
+
+var (
+	handshakeFQDNRe  = regexp.MustCompile(`(?im)^\s*FQDN:\s*(\S+)`)
+	handshakeTYPERe  = regexp.MustCompile(`(?im)^\s*TYPE:\s*TXT\s*$`)
+	handshakeVALUERe = regexp.MustCompile(`(?im)^\s*VALUE:\s*(\S+)`)
+)
+
+// LooksLikeHandshakeReply 判断助手正文是否为握手三行（允许前后有少量空行）。
+func LooksLikeHandshakeReply(text string) bool {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return false
+	}
+	fqdnM := handshakeFQDNRe.FindStringSubmatch(text)
+	valM := handshakeVALUERe.FindStringSubmatch(text)
+	if fqdnM == nil || valM == nil || !handshakeTYPERe.MatchString(text) {
+		return false
+	}
+	token, _, ok := ParseVerifyName(fqdnM[1])
+	if !ok {
+		return false
+	}
+	value := strings.Trim(valM[1], `"'`)
+	return strings.EqualFold(token, value)
+}
+
+// CommandLineFromArgs 从工具参数里拼出可供 IsVerifyDNSLookup 识别的命令行。
+func CommandLineFromArgs(args map[string]interface{}) string {
+	if args == nil {
+		return ""
+	}
+	if c, ok := args["command"].(string); ok && strings.TrimSpace(c) != "" {
+		return c
+	}
+	parts := make([]string, 0, len(args))
+	for _, key := range []string{"cmd", "query", "name", "hostname"} {
+		if s, ok := args[key].(string); ok && strings.TrimSpace(s) != "" {
+			parts = append(parts, s)
+		}
+	}
+	return strings.Join(parts, " ")
 }
 
 // AllowForgeDNSOnErrors 报告这些执行错误下是否仍允许伪造握手应答：

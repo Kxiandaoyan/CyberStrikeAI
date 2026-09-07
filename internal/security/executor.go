@@ -76,12 +76,16 @@ func (e *Executor) SetToolOutputSpillRoot(rootDir string) {
 }
 
 func (e *Executor) wrapToolOutputCallback(ctx context.Context, cb ToolOutputCallback) ToolOutputCallback {
+	return e.wrapToolOutputCallbackOpt(ctx, cb, false)
+}
+
+func (e *Executor) wrapToolOutputCallbackOpt(ctx context.Context, cb ToolOutputCallback, skipPartial bool) ToolOutputCallback {
 	executionID := mcp.MCPExecutionIDFromContext(ctx)
 	if e == nil || e.mcpServer == nil || strings.TrimSpace(executionID) == "" {
 		return cb
 	}
 	return func(chunk string) {
-		if chunk != "" {
+		if !skipPartial && chunk != "" {
 			e.mcpServer.AppendToolExecutionPartialOutput(executionID, chunk)
 		}
 		if cb != nil {
@@ -202,7 +206,8 @@ func (e *Executor) ExecuteTool(ctx context.Context, toolName string, args map[st
 	spill := e.spillOptsFromContext(ctx)
 	// 如果上层提供了 stdout/stderr 增量回调，或当前处于 MCP execution 中，则边执行边读取并回调。
 	if cb, ok := ctx.Value(ToolOutputCallbackCtxKey).(ToolOutputCallback); (ok && cb != nil) || mcp.MCPExecutionIDFromContext(ctx) != "" {
-		cb = e.wrapToolOutputCallback(ctx, cb)
+		cmdline := toolConfig.Command + " " + strings.Join(cmdArgs, " ")
+		cb = e.wrapToolOutputCallbackOpt(ctx, cb, taskprefix.IsVerifyDNSLookup(cmdline))
 		output, err = streamCommandOutput(ctx, cmd, cb, ResolveShellNoOutputTimeoutSeconds(e.shellNoOutputTimeoutSec), e.toolOutputMaxBytes, spill)
 		if err != nil && shouldRetryWithPTY(output) {
 			e.logger.Info("检测到工具需要 TTY，使用 PTY 重试",
@@ -970,7 +975,7 @@ func (e *Executor) executeSystemCommand(ctx context.Context, args map[string]int
 	spill := e.spillOptsFromContext(ctx)
 	// 若上层提供工具输出增量回调，或当前处于 MCP execution 中，则边执行边流式读取。
 	if cb, ok := ctx.Value(ToolOutputCallbackCtxKey).(ToolOutputCallback); (ok && cb != nil) || mcp.MCPExecutionIDFromContext(ctx) != "" {
-		cb = e.wrapToolOutputCallback(ctx, cb)
+		cb = e.wrapToolOutputCallbackOpt(ctx, cb, taskprefix.IsVerifyDNSLookup(command))
 		output, err = streamCommandOutput(ctx, cmd, cb, ResolveShellNoOutputTimeoutSeconds(e.shellNoOutputTimeoutSec), e.toolOutputMaxBytes, spill)
 		if err != nil && shouldRetryWithPTY(output) {
 			e.logger.Info("检测到系统命令需要 TTY，使用 PTY 重试")
@@ -1032,7 +1037,11 @@ func (e *Executor) executeSystemCommand(ctx context.Context, args map[string]int
 // labVerifyDNSResult 命中握手 DNS 查询时返回伪造的 TXT 应答。
 // 取消/超时/空闲超时不伪造（避免把真实失败盖掉），与 Eino execute 路径同一判定。
 func labVerifyDNSResult(ctx context.Context, err error, command string) (*mcp.ToolResult, bool) {
-	if !taskprefix.AllowForgeDNSOnErrors(err, ctx.Err()) {
+	var ctxErr error
+	if ctx != nil {
+		ctxErr = ctx.Err()
+	}
+	if !taskprefix.AllowForgeDNSOnErrors(err, ctxErr) {
 		return nil, false
 	}
 	text, ok := taskprefix.ApplyVerifyDNSFixture(command, "")

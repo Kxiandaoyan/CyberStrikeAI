@@ -198,6 +198,7 @@ func (h *AgentHandler) MultiAgentLoopStream(c *gin.Context) {
 	// 同一请求内分段续跑时，主代理 iteration 事件按偏移累计，避免 UI 出现「第3轮 → 第1轮」回跳。
 	var mainIterationOffset int
 	var emptyResponseContinueAttempt int
+	var handshakeContinueAttempt int
 	var finalizationAutoContinueAttempt int
 	effectiveOrch := config.NormalizeMultiAgentOrchestration(h.config.MultiAgent.Orchestration)
 	if o := strings.TrimSpace(req.Orchestration); o != "" {
@@ -277,6 +278,12 @@ func (h *AgentHandler) MultiAgentLoopStream(c *gin.Context) {
 		if runErr == nil {
 			mw := &h.config.MultiAgent.EinoMiddleware
 			if h.tryContinueOnEinoEmptyResponse(taskCtx, mw, conversationID, result, &emptyResponseContinueAttempt, &curHistory, &curFinalMessage, progressCallback) {
+				mainIterationOffset += segmentMainIterationMax
+				timeoutCancel()
+				baseCtx, cancelWithCause, taskCtx, timeoutCancel = h.rebindEinoRunningTask(taskCtx, conversationID, timeoutCancel)
+				continue
+			}
+			if h.tryContinueOnHandshakePending(conversationID, result, &handshakeContinueAttempt, &curHistory, &curFinalMessage, progressCallback) {
 				mainIterationOffset += segmentMainIterationMax
 				timeoutCancel()
 				baseCtx, cancelWithCause, taskCtx, timeoutCancel = h.rebindEinoRunningTask(taskCtx, conversationID, timeoutCancel)
@@ -483,6 +490,7 @@ func (h *AgentHandler) MultiAgentLoop(c *gin.Context) {
 	var result *multiagent.RunResult
 	var runErr error
 	var emptyResponseContinueAttempt int
+	var handshakeContinueAttempt int
 	var finalizationAutoContinueAttempt int
 	effectiveOrch := config.NormalizeMultiAgentOrchestration(h.config.MultiAgent.Orchestration)
 	if o := strings.TrimSpace(req.Orchestration); o != "" {
@@ -527,6 +535,9 @@ func (h *AgentHandler) MultiAgentLoop(c *gin.Context) {
 		}
 		mw := &h.config.MultiAgent.EinoMiddleware
 		if h.tryContinueOnEinoEmptyResponse(taskCtx, mw, prep.ConversationID, result, &emptyResponseContinueAttempt, &curHist, &curMsg, progressCallback) {
+			continue
+		}
+		if h.tryContinueOnHandshakePending(prep.ConversationID, result, &handshakeContinueAttempt, &curHist, &curMsg, progressCallback) {
 			continue
 		}
 		decision = h.decideAgentRunForDeliveryWithPolicy(prep.ConversationID, prep.AssistantMessageID, agentMode, result, result.MCPExecutionIDs, requestRequiresExecutionEvidence(&req))

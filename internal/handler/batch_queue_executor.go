@@ -261,14 +261,25 @@ func (h *AgentHandler) executeOneBatchSubTask(queueID string, queue *BatchTaskQu
 
 	var resultMA *multiagent.RunResult
 	var runErr error
-	switch {
-	case useBatchMulti:
-		resultMA, runErr = multiagent.RunDeepAgent(taskCtx, h.config, &h.config.MultiAgent, h.agent, h.db, h.logger, conversationID, h.conversationProjectID(conversationID), finalMessage, []agent.ChatMessage{}, roleTools, progressCallback, h.agentsMarkdownDir, batchOrch, nil, h.agentSessionContextBlock(conversationID))
-	default:
-		if h.config == nil {
-			runErr = fmt.Errorf("服务器配置未加载")
-		} else {
-			resultMA, runErr = multiagent.RunEinoSingleChatModelAgent(taskCtx, h.config, &h.config.MultiAgent, h.agent, h.db, h.logger, conversationID, h.conversationProjectID(conversationID), finalMessage, []agent.ChatMessage{}, roleTools, progressCallback, nil, h.agentSessionContextBlock(conversationID))
+	history := []agent.ChatMessage{}
+	runMessage := finalMessage
+	var handshakeContinueAttempt int
+	for {
+		switch {
+		case useBatchMulti:
+			resultMA, runErr = multiagent.RunDeepAgent(taskCtx, h.config, &h.config.MultiAgent, h.agent, h.db, h.logger, conversationID, h.conversationProjectID(conversationID), runMessage, history, roleTools, progressCallback, h.agentsMarkdownDir, batchOrch, nil, h.agentSessionContextBlock(conversationID))
+		default:
+			if h.config == nil {
+				runErr = fmt.Errorf("服务器配置未加载")
+			} else {
+				resultMA, runErr = multiagent.RunEinoSingleChatModelAgent(taskCtx, h.config, &h.config.MultiAgent, h.agent, h.db, h.logger, conversationID, h.conversationProjectID(conversationID), runMessage, history, roleTools, progressCallback, nil, h.agentSessionContextBlock(conversationID))
+			}
+		}
+		if runErr != nil || resultMA == nil {
+			break
+		}
+		if !h.tryContinueOnHandshakePending(conversationID, resultMA, &handshakeContinueAttempt, &history, &runMessage, progressCallback) {
+			break
 		}
 	}
 
