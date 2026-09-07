@@ -115,8 +115,8 @@ func DefaultSingleAgentSystemPrompt() string {
 - 本会话通过 MCP 使用知识库与漏洞记录等。Skills 由 Eino ADK skill 工具按需加载（配置 multi_agent.eino_skills；单代理与多代理均可，未启用时无 skill 工具）。
 - 需要完整 Skill 工作流但当前无 skill 工具时，请确认已启用 multi_agent.eino_skills，或改用 Deep / Supervisor 等多代理编排（/api/multi-agent/stream）。
 - CVE 编号与产品版本：先 skill local-corpus-cve + zvec_grep_search（本地语料优先于联网）。
-- CS Beacon 在线后必须做一次 GitHub-C2 交接（skill handoff-github-c2）：人已生成并在设置页保存下载地址，CS 只投递并按主机名+新出现验上线，然后不管该信道。禁止混用两套 id，禁止模型编包或改 URL。
-- 评估目标的长期维权交给 GitHub-C2，禁止用 c2_task task_type=persist（那是临时自启动，不可靠）。维权 = handoff-github-c2，一次交接后停用。
+- CS Beacon 在线后必须做一次自定义维权 C2 交接（skill handoff-persistence-c2）：运维方已在自己维权 C2 上生成并在设置页保存下载地址，CS 只投递并按主机名+新出现验上线，然后不管该信道。禁止混用两套 id，禁止模型编包或改 URL。
+- 评估目标的长期维权交给运维方部署的维权 C2，禁止用 c2_task task_type=persist（那是临时自启动，不可靠）。维权 = handoff-persistence-c2，一次交接后停用。
 - 可复用方法论由经验草稿人审后入库；会话中不要写 SKILL.md。
 
 ` + projectprompt.ShellExecExecuteGuidanceSection()

@@ -526,15 +526,15 @@ setup_zvec_playbooks() {
 3. 命中 → upsert_project_fact key=intel/<cve-id>，confidence=tentative。
 4. 本地 0 命中 → component-vuln-intel 外网序列。
 EOF
-    cat > "$PB_DIR/github-c2-handoff.md" <<'EOF'
-# GitHub-C2 交接（Beacon 立足后）
+    cat > "$PB_DIR/persistence-c2-handoff.md" <<'EOF'
+# 自定义维权 C2 交接（Beacon 立足后）
 
 1. c2_session get：status ∈ {active, sleeping} 且 hostname 非 unknown。
-2. github_c2_handoff_source：payload_url 为空 → 停，请人去设置页保存。
-3. github_c2_list_agents 拍 baseline（内部已 refresh）。
+2. persistence_c2_handoff_source：payload_url 为空 → 停，请人去设置页保存。
+3. persistence_c2_list_agents 拍 baseline（内部已 refresh）。
 4. c2_task 按已保存 URL 投递并拉起（HITL 看一眼）。
 5. wait_seconds 内每 15s list：hostname 全等 + (channel,id)/uuid 新出现。
-6. 命中 → persist/handoff-<session_id> confirmed，停止 github_c2_*。
+6. 命中 → persist/handoff-<session_id> confirmed，停止 persistence_c2_*。
 EOF
     cat > "$PB_DIR/experience-closeout.md" <<'EOF'
 # 项目收尾与经验沉淀

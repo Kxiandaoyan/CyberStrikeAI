@@ -77,14 +77,22 @@ CVE 库 → 搜索引擎×3 → 中文社区 → GitHub 搜 PoC → 资产引擎
   `category` 区分、重跑幂等。导入后产品名/漏洞类型的语义检索即可命中（同一 poc/** 索引 glob）。
   导入内容仅存本机；对外分发需自行确认源仓库许可。
 
-### 4. GitHub-C2 交接（长期维权 handoff）
-- 内置 C2 Beacon 没有目标侧自启动/长期维权；本版本新增与独立部署的 GitHub-C2 控制器的
-  **交接**链路：人在 G-C2 控制台生成 Agent → 在 CS 设置页保存「目标可达的下载地址」→
+### 4. 自定义维权 C2 交接（长期维权 handoff）
+- 内置 C2 Beacon 没有目标侧自启动/长期维权；本版本新增与**运维方自部署的任意维权 C2**的
+  交接链路：人在自己的维权 C2 上生成/放置好 Agent → 在 CS 设置页保存「目标可达的下载地址」→
   CS 经在线 Beacon 投递一次 → 按「主机名 + 新出现」判定上线 → 记黑板后**不再使用该信道**。
-- 内置两个只读 MCP 工具：`github_c2_handoff_source`（读已保存的投递配置）、
-  `github_c2_list_agents`（refresh + 结构化列表，含自动登录/会话过期重登）。
-- 设置页「GitHub-C2 交接」小节独立保存（不校验 OpenAI 必填），控制器凭据**只写不回显**；
-  C2 会话页有只读回显。配套 Skill：`handoff-github-c2`（含判定纪律与 `persist/handoff-url-override` 约定）。
+- **怎么对接你自己的维权 C2**（控制器自行部署运行，CS 只经 HTTP 对接，不参与生成 Agent），
+  控制器只需提供三个 HTTP 接口：
+  1. `POST /login` —— 表单 `username`/`password`，成功后种 `session` cookie；
+  2. `POST /api/agents/refresh` —— 触发信道扫描（未配信道返回 4xx 可忽略）；
+  3. `GET /api/agents` —— 返回 agent 列表 JSON（字段含 hostname/username/os/id/agent_uuid/
+     channel/last_seen/last_reply_ago）。
+  满足该契约的控制器在设置页「自定义维权 C2 交接」填好地址与账号即可使用。
+- 内置两个只读 MCP 工具：`persistence_c2_handoff_source`（读已保存的投递配置）、
+  `persistence_c2_list_agents`（refresh + 结构化列表，含自动登录/会话过期重登）。
+- 设置页交接小节独立保存（不校验 OpenAI 必填），控制器凭据**只写不回显**；
+  C2 会话页有只读回显。配套 Skill：`handoff-persistence-c2`
+  （含判定纪律与 `persist/handoff-url-override` 约定，并禁止用内置 `c2_task persist` 当长期维权）。
 
 ### 5. 经验总结（项目收尾 → 人审 → 入库）
 - 项目可交付完成 / 批量队列收尾时，自动汇总黑板事实与漏洞记录，经独立 LLM 配置
@@ -132,7 +140,7 @@ cd CyberStrikeAI
 首次启动后：
 1. 复制/对照 `config.example.yaml` 生成 `config.yaml`（二进制首次启动也会自动从模板创建）。
 2. 按需打开开关：`zvec_grep.enabled`（本地 CVE 检索）、`cve_corpus.enabled`（每日增量同步）、
-   `experience.enabled` + `auto_draft`（经验 + POC 草稿）、`github_c2`（交接配置，可在网页设置页保存）。
+   `experience.enabled` + `auto_draft`（经验 + POC 草稿）、`persistence_c2`（交接配置，可在网页设置页保存）。
 3. 浏览器打开 `https://127.0.0.1:8080`（自签证书；`./run.sh --http` 用纯 HTTP），
    首次启动日志会打印管理员初始密码。
 
@@ -168,8 +176,8 @@ tar xzf assets/cve-corpus.tar.gz -C data/corpus
 ## 与上游同步
 
 上游更新可对照 [Ed1s0nZ/CyberStrikeAI](https://github.com/Ed1s0nZ/CyberStrikeAI) 手动合并；
-本仓库新增代码集中在 `internal/cvesync/`、`internal/experience/`、`internal/githubc2sidecar/`、
-`internal/app/github_c2_tools.go`、`internal/app/experience_apply.go` 与对应前端页。
+本仓库新增代码集中在 `internal/cvesync/`、`internal/experience/`、`internal/persistencec2sidecar/`、
+`internal/app/persistence_c2_tools.go`、`internal/app/experience_apply.go` 与对应前端页。
 
 ## License
 

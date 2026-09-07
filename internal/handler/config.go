@@ -48,10 +48,10 @@ type BatchTaskToolRegistrar func() error
 // C2ToolRegistrar C2 MCP 工具注册器（ApplyConfig 时 ClearTools 之后调用）
 type C2ToolRegistrar func() error
 
-// GitHubC2ToolRegistrar GitHub-C2 交接 MCP 工具注册器。
-// 独立于内置 C2 开关：ApplyConfig 清空工具后必须重新注册 github_c2_*，
+// PersistenceC2ToolRegistrar 自定义维权 C2 交接 MCP 工具注册器。
+// 独立于内置 C2 开关：ApplyConfig 清空工具后必须重新注册 persistence_c2_*，
 // 否则「保存交接配置 → 应用配置」会让验上线工具当场消失。
-type GitHubC2ToolRegistrar func() error
+type PersistenceC2ToolRegistrar func() error
 
 // C2Runtime ApplyConfig 时按配置启停 C2 子系统（由 internal/app.App 实现）
 type C2Runtime interface {
@@ -91,7 +91,7 @@ type ConfigHandler struct {
 	skillsToolRegistrar        SkillsToolRegistrar        // Skills工具注册器（可选）
 	batchTaskToolRegistrar     BatchTaskToolRegistrar     // 批量任务 MCP 工具（可选）
 	c2ToolRegistrar            C2ToolRegistrar            // C2 MCP 工具（可选）
-	githubC2ToolRegistrar      GitHubC2ToolRegistrar      // GitHub-C2 交接 MCP 工具（Apply 后必重挂）
+	persistenceC2ToolRegistrar PersistenceC2ToolRegistrar // 自定义维权 C2 交接 MCP 工具（Apply 后必重挂）
 	c2Runtime                  C2Runtime                  // C2 启停（可选）
 	retrieverUpdater           RetrieverUpdater           // 检索器更新器（可选）
 	knowledgeInitializer       KnowledgeInitializer       // 知识库初始化器（可选）
@@ -203,12 +203,12 @@ func (h *ConfigHandler) SetC2ToolRegistrar(registrar C2ToolRegistrar) {
 	h.c2ToolRegistrar = registrar
 }
 
-// SetGitHubC2ToolRegistrar 设置 GitHub-C2 交接 MCP 工具注册器。
-// 与 C2 注册器分开：内置 C2 关闭时 handoff 工具也必须在 Apply 后存活。
-func (h *ConfigHandler) SetGitHubC2ToolRegistrar(registrar GitHubC2ToolRegistrar) {
+// SetPersistenceC2ToolRegistrar 设置自定义维权 C2 交接 MCP 工具注册器。
+// 与 C2 注册器分开：内置 C2 关闭时交接工具也必须在 Apply 后存活。
+func (h *ConfigHandler) SetPersistenceC2ToolRegistrar(registrar PersistenceC2ToolRegistrar) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.githubC2ToolRegistrar = registrar
+	h.persistenceC2ToolRegistrar = registrar
 }
 
 // SetC2Runtime 设置 C2 运行时（Apply 时启停）
@@ -274,22 +274,22 @@ func (h *ConfigHandler) ApplyWechatRobotBinding(wc config.RobotWechatConfig) err
 
 // GetConfigResponse 获取配置响应
 type GetConfigResponse struct {
-	AI         config.AIConfig          `json:"ai"`
-	OpenAI     config.OpenAIConfig      `json:"openai"`
-	Vision     config.VisionConfig     `json:"vision"`
-	FOFA       config.FofaConfig       `json:"fofa"`
-	ZoomEye    config.SpaceSearchConfig `json:"zoomeye"`
-	Quake      config.SpaceSearchConfig `json:"quake"`
-	Shodan     config.SpaceSearchConfig `json:"shodan"`
-	MCP        config.MCPConfig         `json:"mcp"`
-	Tools      []ToolConfigInfo         `json:"tools"`
-	Agent      config.AgentConfig       `json:"agent"`
-	Hitl       config.HitlConfig        `json:"hitl,omitempty"`
-	Knowledge  config.KnowledgeConfig  `json:"knowledge"`
-	Robots     config.RobotsConfig     `json:"robots,omitempty"`
-	MultiAgent config.MultiAgentPublic  `json:"multi_agent,omitempty"`
-	C2         config.C2Public          `json:"c2"`
-	GitHubC2   config.GitHubC2HandoffPublic `json:"github_c2,omitempty"`
+	AI            config.AIConfig                   `json:"ai"`
+	OpenAI        config.OpenAIConfig               `json:"openai"`
+	Vision        config.VisionConfig               `json:"vision"`
+	FOFA          config.FofaConfig                 `json:"fofa"`
+	ZoomEye       config.SpaceSearchConfig          `json:"zoomeye"`
+	Quake         config.SpaceSearchConfig          `json:"quake"`
+	Shodan        config.SpaceSearchConfig          `json:"shodan"`
+	MCP           config.MCPConfig                  `json:"mcp"`
+	Tools         []ToolConfigInfo                  `json:"tools"`
+	Agent         config.AgentConfig                `json:"agent"`
+	Hitl          config.HitlConfig                 `json:"hitl,omitempty"`
+	Knowledge     config.KnowledgeConfig            `json:"knowledge"`
+	Robots        config.RobotsConfig               `json:"robots,omitempty"`
+	MultiAgent    config.MultiAgentPublic           `json:"multi_agent,omitempty"`
+	C2            config.C2Public                   `json:"c2"`
+	PersistenceC2 config.PersistenceC2HandoffPublic `json:"persistence_c2,omitempty"`
 }
 
 // ToolConfigInfo 工具配置信息
@@ -385,22 +385,22 @@ func (h *ConfigHandler) GetConfig(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, GetConfigResponse{
-		AI:         h.config.AI,
-		OpenAI:     h.config.OpenAI,
-		Vision:     h.config.Vision,
-		FOFA:       h.config.FOFA,
-		ZoomEye:    h.config.ZoomEye,
-		Quake:      h.config.Quake,
-		Shodan:     h.config.Shodan,
-		MCP:        h.config.MCP,
-		Tools:      tools,
-		Agent:      h.config.Agent,
-		Hitl:       h.config.Hitl,
-		Knowledge:  h.config.Knowledge,
-		C2:         h.config.C2.Public(),
-		GitHubC2:   h.config.GitHubC2.Public(),
-		Robots:     h.config.Robots,
-		MultiAgent: multiPub,
+		AI:            h.config.AI,
+		OpenAI:        h.config.OpenAI,
+		Vision:        h.config.Vision,
+		FOFA:          h.config.FOFA,
+		ZoomEye:       h.config.ZoomEye,
+		Quake:         h.config.Quake,
+		Shodan:        h.config.Shodan,
+		MCP:           h.config.MCP,
+		Tools:         tools,
+		Agent:         h.config.Agent,
+		Hitl:          h.config.Hitl,
+		Knowledge:     h.config.Knowledge,
+		C2:            h.config.C2.Public(),
+		PersistenceC2: h.config.PersistenceC2.Public(),
+		Robots:        h.config.Robots,
+		MultiAgent:    multiPub,
 	})
 }
 
@@ -730,22 +730,22 @@ func (h *ConfigHandler) GetTools(c *gin.Context) {
 
 // UpdateConfigRequest 更新配置请求
 type UpdateConfigRequest struct {
-	AI         *config.AIConfig            `json:"ai,omitempty"`
-	OpenAI     *config.OpenAIConfig        `json:"openai,omitempty"`
-	Vision     *config.VisionConfig        `json:"vision,omitempty"`
-	FOFA       *config.FofaConfig          `json:"fofa,omitempty"`
-	ZoomEye    *config.SpaceSearchConfig   `json:"zoomeye,omitempty"`
-	Quake      *config.SpaceSearchConfig   `json:"quake,omitempty"`
-	Shodan     *config.SpaceSearchConfig   `json:"shodan,omitempty"`
-	MCP        *config.MCPConfig           `json:"mcp,omitempty"`
-	Tools      []ToolEnableStatus          `json:"tools,omitempty"`
-	Agent      *AgentConfigUpdate          `json:"agent,omitempty"`
-	Hitl       *config.HitlConfig          `json:"hitl,omitempty"`
-	Knowledge  *config.KnowledgeConfig    `json:"knowledge,omitempty"`
-	Robots     *config.RobotsConfig       `json:"robots,omitempty"`
-	MultiAgent *config.MultiAgentAPIUpdate `json:"multi_agent,omitempty"`
-	C2         *config.C2APIUpdate         `json:"c2,omitempty"`
-	GitHubC2   *config.GitHubC2HandoffUpdate `json:"github_c2,omitempty"`
+	AI            *config.AIConfig                   `json:"ai,omitempty"`
+	OpenAI        *config.OpenAIConfig               `json:"openai,omitempty"`
+	Vision        *config.VisionConfig               `json:"vision,omitempty"`
+	FOFA          *config.FofaConfig                 `json:"fofa,omitempty"`
+	ZoomEye       *config.SpaceSearchConfig          `json:"zoomeye,omitempty"`
+	Quake         *config.SpaceSearchConfig          `json:"quake,omitempty"`
+	Shodan        *config.SpaceSearchConfig          `json:"shodan,omitempty"`
+	MCP           *config.MCPConfig                  `json:"mcp,omitempty"`
+	Tools         []ToolEnableStatus                 `json:"tools,omitempty"`
+	Agent         *AgentConfigUpdate                 `json:"agent,omitempty"`
+	Hitl          *config.HitlConfig                 `json:"hitl,omitempty"`
+	Knowledge     *config.KnowledgeConfig            `json:"knowledge,omitempty"`
+	Robots        *config.RobotsConfig               `json:"robots,omitempty"`
+	MultiAgent    *config.MultiAgentAPIUpdate        `json:"multi_agent,omitempty"`
+	C2            *config.C2APIUpdate                `json:"c2,omitempty"`
+	PersistenceC2 *config.PersistenceC2HandoffUpdate `json:"persistence_c2,omitempty"`
 }
 
 // AgentConfigUpdate 用于 PATCH /api/config 的 agent 段：仅 JSON 中出现的字段（指针非 nil）覆盖内存配置。
@@ -985,15 +985,15 @@ func (h *ConfigHandler) UpdateConfig(c *gin.Context) {
 		h.logger.Info("更新C2配置", zap.Bool("enabled", v))
 	}
 
-	if req.GitHubC2 != nil {
-		if err := h.config.GitHubC2.Apply(req.GitHubC2); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("github_c2: %v", err)})
+	if req.PersistenceC2 != nil {
+		if err := h.config.PersistenceC2.Apply(req.PersistenceC2); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("persistence_c2: %v", err)})
 			return
 		}
-		h.logger.Info("更新GitHub-C2交接配置",
-			zap.String("payload_url", h.config.GitHubC2.PayloadURL),
-			zap.String("drop_path", h.config.GitHubC2.DropPath),
-			zap.Int("wait_seconds", h.config.GitHubC2.WaitSeconds))
+		h.logger.Info("更新自定义维权C2交接配置",
+			zap.String("payload_url", h.config.PersistenceC2.PayloadURL),
+			zap.String("drop_path", h.config.PersistenceC2.DropPath),
+			zap.Int("wait_seconds", h.config.PersistenceC2.WaitSeconds))
 	}
 
 	// 多代理标量（sub_agents 等仍由 config.yaml 维护）
@@ -1677,12 +1677,12 @@ func (h *ConfigHandler) ApplyConfig(c *gin.Context) {
 		}
 	}
 
-	// 重新注册 GitHub-C2 交接 MCP 工具（不受内置 C2 开关影响）
-	if h.githubC2ToolRegistrar != nil {
-		if err := h.githubC2ToolRegistrar(); err != nil {
-			h.logger.Error("重新注册 GitHub-C2 交接 MCP 工具失败", zap.Error(err))
+	// 重新注册自定义维权 C2 交接 MCP 工具（不受内置 C2 开关影响）
+	if h.persistenceC2ToolRegistrar != nil {
+		if err := h.persistenceC2ToolRegistrar(); err != nil {
+			h.logger.Error("重新注册自定义维权 C2 交接 MCP 工具失败", zap.Error(err))
 		} else {
-			h.logger.Info("GitHub-C2 交接 MCP 工具已重新注册")
+			h.logger.Info("自定义维权 C2 交接 MCP 工具已重新注册")
 		}
 	}
 
@@ -1811,7 +1811,7 @@ func (h *ConfigHandler) saveConfig() error {
 	updateSpaceSearchConfig(root, "shodan", h.config.Shodan)
 	updateKnowledgeConfig(root, h.config.Knowledge)
 	updateC2Config(root, h.config.C2)
-	updateGitHubC2Config(root, h.config.GitHubC2)
+	updatePersistenceC2Config(root, h.config.PersistenceC2)
 	updateRobotsConfig(root, h.config.Robots)
 	updateHitlConfig(root, h.config.Hitl)
 	updateMultiAgentConfig(root, h.config.MultiAgent)
@@ -2132,26 +2132,26 @@ func updateC2Config(doc *yaml.Node, cfg config.C2Config) {
 	setBoolInMap(c2Node, "enabled", cfg.EnabledEffective())
 }
 
-// updateGitHubC2Config 将 GitHub-C2 交接配置写回 config.yaml（补丁式）。
+// updatePersistenceC2Config 将自定义维权 C2 交接配置写回 config.yaml（补丁式）。
 // payload_url / drop_path / wait_seconds 总是回写；
 // listen / web_user / web_pass 仅在内存值非空时回写——
 // 绝不写空串覆盖手改 yaml 的凭据（设置页密码框只写不回显）。
-func updateGitHubC2Config(doc *yaml.Node, cfg config.GitHubC2EmbedConfig) {
+func updatePersistenceC2Config(doc *yaml.Node, cfg config.PersistenceC2EmbedConfig) {
 	root := doc.Content[0]
-	gc2Node := ensureMap(root, "github_c2")
-	setStringInMap(gc2Node, "payload_url", cfg.PayloadURL)
-	setStringInMap(gc2Node, "drop_path", cfg.DropPath)
+	pc2Node := ensureMap(root, "persistence_c2")
+	setStringInMap(pc2Node, "payload_url", cfg.PayloadURL)
+	setStringInMap(pc2Node, "drop_path", cfg.DropPath)
 	if cfg.WaitSeconds > 0 {
-		setIntInMap(gc2Node, "wait_seconds", cfg.WaitSeconds)
+		setIntInMap(pc2Node, "wait_seconds", cfg.WaitSeconds)
 	}
 	if v := strings.TrimSpace(cfg.Listen); v != "" {
-		setStringInMap(gc2Node, "listen", v)
+		setStringInMap(pc2Node, "listen", v)
 	}
 	if v := strings.TrimSpace(cfg.WebUser); v != "" {
-		setStringInMap(gc2Node, "web_user", v)
+		setStringInMap(pc2Node, "web_user", v)
 	}
 	if v := strings.TrimSpace(cfg.WebPass); v != "" {
-		setStringInMap(gc2Node, "web_pass", v)
+		setStringInMap(pc2Node, "web_pass", v)
 	}
 }
 

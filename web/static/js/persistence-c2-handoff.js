@@ -1,15 +1,15 @@
-// GitHub-C2 Handoff Settings — 保存/加载交接配置（独立于主设置表单）
+// 自定义维权 C2 交接设置 — 保存/加载交接配置（独立于主设置表单）
 // Uses apiFetch (auth.js) for authenticated API calls.
 (function () {
     'use strict';
 
-    async function saveGithubC2Handoff() {
-        const url = (document.getElementById('github-c2-payload-url')?.value || '').trim();
-        const dropPath = (document.getElementById('github-c2-drop-path')?.value || '').trim();
-        const waitSec = parseInt(document.getElementById('github-c2-wait-seconds')?.value || '180', 10);
-        const listen = (document.getElementById('github-c2-listen')?.value || '').trim();
-        const webUser = (document.getElementById('github-c2-web-user')?.value || '').trim();
-        const webPass = (document.getElementById('github-c2-web-pass')?.value || '').trim();
+    async function savePersistenceC2Handoff() {
+        const url = (document.getElementById('c2-payload-url')?.value || '').trim();
+        const dropPath = (document.getElementById('c2-drop-path')?.value || '').trim();
+        const waitSec = parseInt(document.getElementById('c2-wait-seconds')?.value || '180', 10);
+        const listen = (document.getElementById('c2-ctrl-listen')?.value || '').trim();
+        const webUser = (document.getElementById('c2-web-user')?.value || '').trim();
+        const webPass = (document.getElementById('c2-web-pass')?.value || '').trim();
 
         // Validate
         if (url && !url.startsWith('http://') && !url.startsWith('https://')) {
@@ -51,7 +51,7 @@
             const r = await apiFetch('/api/config', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ github_c2: body })
+                body: JSON.stringify({ persistence_c2: body })
             });
             if (!r.ok) {
                 const d = await r.json().catch(() => ({}));
@@ -63,37 +63,37 @@
                 alert('应用配置失败: ' + r2.status);
                 return;
             }
-            document.getElementById('github-c2-web-pass').value = '';
-            alert('GitHub-C2 交接配置已保存');
+            document.getElementById('c2-web-pass').value = '';
+            alert('自定义维权 C2 交接配置已保存');
         } catch (e) {
             alert('保存失败: ' + e.message);
         }
     }
 
-    async function loadGithubC2Handoff() {
+    async function loadPersistenceC2Handoff() {
         try {
             const r = await apiFetch('/api/config');
             if (!r.ok) return;
             const d = await r.json();
-            const gc2 = d.github_c2 || {};
-            const urlEl = document.getElementById('github-c2-payload-url');
-            const dpEl = document.getElementById('github-c2-drop-path');
-            const wsEl = document.getElementById('github-c2-wait-seconds');
-            const listenEl = document.getElementById('github-c2-listen');
-            const userEl = document.getElementById('github-c2-web-user');
-            const passEl = document.getElementById('github-c2-web-pass');
-            if (urlEl) urlEl.value = gc2.payload_url || '';
-            if (dpEl) dpEl.value = gc2.drop_path || '';
-            if (wsEl) wsEl.value = gc2.wait_seconds || 180;
-            if (listenEl) listenEl.value = gc2.listen || '';
-            if (userEl) userEl.value = gc2.web_user || '';
+            const pc2 = d.persistence_c2 || {};
+            const urlEl = document.getElementById('c2-payload-url');
+            const dpEl = document.getElementById('c2-drop-path');
+            const wsEl = document.getElementById('c2-wait-seconds');
+            const listenEl = document.getElementById('c2-ctrl-listen');
+            const userEl = document.getElementById('c2-web-user');
+            const passEl = document.getElementById('c2-web-pass');
+            if (urlEl) urlEl.value = pc2.payload_url || '';
+            if (dpEl) dpEl.value = pc2.drop_path || '';
+            if (wsEl) wsEl.value = pc2.wait_seconds || 180;
+            if (listenEl) listenEl.value = pc2.listen || '';
+            if (userEl) userEl.value = pc2.web_user || '';
             // 密码只写不回显：仅提示是否已设置
-            if (passEl) passEl.placeholder = gc2.has_pass ? '已设置（留空 = 不修改）' : '未设置';
+            if (passEl) passEl.placeholder = pc2.has_pass ? '已设置（留空 = 不修改）' : '未设置';
         } catch (e) { /* ignore */ }
     }
 
-    // C2 会话页只读回显（说明书 §6.4）：不第二套存储，仅显示设置页已保存的配置
-    async function loadGithubC2HandoffEcho() {
+    // C2 会话页只读回显：不第二套存储，仅显示设置页已保存的配置
+    async function loadPersistenceC2HandoffEcho() {
         const box = document.getElementById('c2-handoff-echo');
         const urlEl = document.getElementById('c2-handoff-echo-url');
         if (!box || !urlEl) return;
@@ -101,14 +101,14 @@
             const r = await apiFetch('/api/config');
             if (!r.ok) { box.style.display = 'none'; return; }
             const d = await r.json();
-            const gc2 = d.github_c2 || {};
-            if (gc2.payload_url) {
-                let text = gc2.payload_url;
-                if (gc2.drop_path) text += '  →  ' + gc2.drop_path;
-                text += '（验上线等待 ' + (gc2.wait_seconds || 180) + 's）';
+            const pc2 = d.persistence_c2 || {};
+            if (pc2.payload_url) {
+                let text = pc2.payload_url;
+                if (pc2.drop_path) text += '  →  ' + pc2.drop_path;
+                text += '（验上线等待 ' + (pc2.wait_seconds || 180) + 's）';
                 urlEl.textContent = text;
                 box.style.display = '';
-            } else if (gc2.has_pass) {
+            } else if (pc2.has_pass) {
                 urlEl.textContent = '凭据已配置，但未保存下载地址 — 在线后无法交接';
                 box.style.display = '';
             } else {
@@ -124,13 +124,13 @@
     window.switchPage = function (page) {
         origSwitch(page);
         if (page === 'settings') {
-            loadGithubC2Handoff();
+            loadPersistenceC2Handoff();
         }
         if (page === 'c2-sessions') {
-            loadGithubC2HandoffEcho();
+            loadPersistenceC2HandoffEcho();
         }
     };
 
-    window.saveGithubC2Handoff = saveGithubC2Handoff;
-    window.loadGithubC2Handoff = loadGithubC2Handoff;
+    window.savePersistenceC2Handoff = savePersistenceC2Handoff;
+    window.loadPersistenceC2Handoff = loadPersistenceC2Handoff;
 })();

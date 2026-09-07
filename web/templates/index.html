@@ -2986,9 +2986,9 @@
                             <button class="btn-secondary" onclick="C2.loadSessions()"><span data-i18n="common.refresh">刷新</span></button>
                         </div>
                     </div>
-                    <!-- GitHub-C2 交接只读回显（说明书 §6.4）：无第二套存储，仅显示设置页已保存的配置 -->
+                    <!-- 自定义维权 C2 交接只读回显：无第二套存储，仅显示设置页已保存的配置 -->
                     <div id="c2-handoff-echo" style="display:none;margin:0 20px 8px;padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--text-secondary)">
-                        <span style="font-weight:600;color:var(--text-primary)">GitHub-C2 交接：</span>
+                        <span style="font-weight:600;color:var(--text-primary)">自定义维权 C2 交接：</span>
                         <span id="c2-handoff-echo-url"></span>
                         <button type="button" class="btn-secondary" style="padding:2px 10px;font-size:12px;margin-left:8px" onclick="switchPage('settings')">去设置</button>
                     </div>
@@ -4358,41 +4358,41 @@
                                     </div>
                                 </div>
                                 <div class="settings-subsection">
-                                    <h4>GitHub-C2 交接</h4>
+                                    <h4>自定义维权 C2 交接</h4>
                                     <div class="settings-form">
                                         <div class="form-group">
-                                            <label for="github-c2-payload-url">下载地址（目标机可达）</label>
-                                            <input type="text" id="github-c2-payload-url" placeholder="http://your-file-server/github-c2-agent" />
-                                            <small class="form-hint">人填：目标机能访问的下载地址。由人在 GitHub-C2 控制台生成 Agent 后，把二进制放到目标网可达的位置，将地址粘贴到这里。禁止模型填写。</small>
+                                            <label for="c2-payload-url">下载地址（目标机可达）</label>
+                                            <input type="text" id="c2-payload-url" placeholder="http://your-file-server/agent" />
+                                            <small class="form-hint">人填：目标机能访问的下载地址。由人在自己的维权 C2 上生成/放置好 Agent，将地址粘贴到这里。禁止模型填写。</small>
                                         </div>
                                         <div class="form-group">
-                                            <label for="github-c2-drop-path">目标落盘路径（可空）</label>
-                                            <input type="text" id="github-c2-drop-path" placeholder="/tmp/github-c2-agent" />
-                                            <small class="form-hint">可空：Windows 默认 %TEMP%\github-c2-agent.exe，Linux/mac 默认 /tmp/github-c2-agent</small>
+                                            <label for="c2-drop-path">目标落盘路径（可空）</label>
+                                            <input type="text" id="c2-drop-path" placeholder="/tmp/agent" />
+                                            <small class="form-hint">可空：Windows 默认 %TEMP%\agent.exe，Linux/mac 默认 /tmp/agent</small>
                                         </div>
                                         <div class="form-group">
-                                            <label for="github-c2-wait-seconds">验上线等待（秒）</label>
-                                            <input type="number" id="github-c2-wait-seconds" value="180" min="60" max="600" />
-                                            <small class="form-hint">交接后等几秒确认 GitHub-C2 上线。最小 60。</small>
+                                            <label for="c2-wait-seconds">验上线等待（秒）</label>
+                                            <input type="number" id="c2-wait-seconds" value="180" min="60" max="600" />
+                                            <small class="form-hint">交接后等几秒确认维权 C2 上线。最小 60。</small>
                                         </div>
                                         <div class="form-group">
-                                            <label for="github-c2-listen">控制器地址（host:port）</label>
-                                            <input type="text" id="github-c2-listen" placeholder="127.0.0.1:8082" />
-                                            <small class="form-hint">GitHub-C2 Flask 控制器仍在原仓单独运行（python app.py），CS 只经 HTTP 投递+验上线，不代为启动。</small>
+                                            <label for="c2-ctrl-listen">控制器地址（host:port）</label>
+                                            <input type="text" id="c2-ctrl-listen" placeholder="127.0.0.1:8082" />
+                                            <small class="form-hint">你的维权 C2 控制器自行运行，CS 只经 HTTP 投递+验上线，不代为启动。控制器需提供：POST /login 表单登录、POST /api/agents/refresh、GET /api/agents（返回含 hostname/os/agent_uuid 的列表 JSON）。</small>
                                         </div>
                                         <div class="form-group">
-                                            <label for="github-c2-web-user">控制器用户名</label>
-                                            <input type="text" id="github-c2-web-user" placeholder="admin" autocomplete="off" />
+                                            <label for="c2-web-user">控制器用户名</label>
+                                            <input type="text" id="c2-web-user" placeholder="admin" autocomplete="off" />
                                         </div>
                                         <div class="form-group">
-                                            <label for="github-c2-web-pass">控制器密码（只写不回显）</label>
-                                            <input type="password" id="github-c2-web-pass" placeholder="留空 = 不修改已保存的密码" autocomplete="new-password" />
-                                            <small class="form-hint">验上线（github_c2_list_agents）需要控制器账号。密码只写不回显：留空表示沿用已保存值。</small>
+                                            <label for="c2-web-pass">控制器密码（只写不回显）</label>
+                                            <input type="password" id="c2-web-pass" placeholder="留空 = 不修改已保存的密码" autocomplete="new-password" />
+                                            <small class="form-hint">验上线（persistence_c2_list_agents）需要控制器账号。密码只写不回显：留空表示沿用已保存值。</small>
                                         </div>
                                     </div>
                                 </div>
                                 <div class="settings-actions">
-                                    <button class="btn-primary" onclick="saveGithubC2Handoff()" data-require-permission="config:write">保存交接配置</button>
+                                    <button class="btn-primary" onclick="savePersistenceC2Handoff()" data-require-permission="config:write">保存交接配置</button>
                                     <button class="btn-primary" onclick="applySettings()" data-require-permission="config:write" data-i18n="settings.apply.button">应用配置</button>
                                 </div>
                             </div>
@@ -6867,6 +6867,6 @@
     <script src="/static/js/rbac-guards.js?v=20260717-1"></script>
     <script src="/static/js/cve-corpus.js"></script>
     <script src="/static/js/experience.js"></script>
-    <script src="/static/js/github-c2-handoff.js"></script>
+    <script src="/static/js/persistence-c2-handoff.js"></script>
 </body>
 </html>

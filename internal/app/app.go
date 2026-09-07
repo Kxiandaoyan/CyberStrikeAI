@@ -24,7 +24,6 @@ import (
 	"cyberstrike-ai/internal/database"
 	"cyberstrike-ai/internal/einoobserve"
 	"cyberstrike-ai/internal/experience"
-	"cyberstrike-ai/internal/githubc2sidecar"
 	"cyberstrike-ai/internal/handler"
 	"cyberstrike-ai/internal/hitl"
 	"cyberstrike-ai/internal/knowledge"
@@ -33,6 +32,7 @@ import (
 	"cyberstrike-ai/internal/mcp/builtin"
 	"cyberstrike-ai/internal/monitor"
 	"cyberstrike-ai/internal/multiagent"
+	"cyberstrike-ai/internal/persistencec2sidecar"
 	"cyberstrike-ai/internal/robot"
 	"cyberstrike-ai/internal/security"
 	"cyberstrike-ai/internal/skillpackage"
@@ -222,13 +222,13 @@ func New(cfg *config.Config, log *logger.Logger, configPath string) (*App, error
 		externalMCPMgr.StartAllEnabled()
 	}
 
-	// GitHub-C2 内嵌探测（说明书 §3 第 4 步 / §6.8）：目录不存在打一行 skip，
-	// 存在则提示手动启动 Flask。本阶段 CS 不 spawn 进程，只经 HTTP 交接。
-	gc2ConfigPath := strings.TrimSpace(configPath)
-	if gc2ConfigPath == "" {
-		gc2ConfigPath = "config.yaml"
+	// 自定义维权 C2 内嵌探测：目录不存在打一行 skip，存在则提示手动启动。
+	// 本阶段 CS 不 spawn 进程，只经 HTTP 交接（控制器由运维方自行部署）。
+	pc2ConfigPath := strings.TrimSpace(configPath)
+	if pc2ConfigPath == "" {
+		pc2ConfigPath = "config.yaml"
 	}
-	githubc2sidecar.PrepareAndStart(cfg.GitHubC2, filepath.Dir(gc2ConfigPath), log.Logger)
+	persistencec2sidecar.PrepareAndStart(cfg.PersistenceC2, filepath.Dir(pc2ConfigPath), log.Logger)
 
 	execReconciler := monitor.NewExecutionReconciler(db, mcpServer, externalMCPMgr, log.Logger)
 	execReconciler.ReconcileOnStartup()
@@ -493,8 +493,8 @@ func New(cfg *config.Config, log *logger.Logger, configPath string) (*App, error
 	if c2Manager != nil {
 		registerC2Tools(mcpServer, c2Manager, log.Logger, cfg.Server.Port)
 	}
-	// GitHub-C2 handoff tools (read-only, always registered so model can check prereqs)
-	registerGithubC2Tools(mcpServer, cfg, log.Logger)
+	// 自定义维权 C2 handoff tools (read-only, always registered so model can check prereqs)
+	registerPersistenceC2Tools(mcpServer, cfg, log.Logger)
 	c2Handler := handler.NewC2Handler(c2Manager, log.Logger)
 	c2Handler.SetAudit(auditSvc)
 
@@ -654,11 +654,11 @@ func New(cfg *config.Config, log *logger.Logger, configPath string) (*App, error
 		return nil
 	})
 
-	// GitHub-C2 交接工具独立于内置 C2 开关：ApplyConfig 清空工具后必须重挂，
-	// 否则「保存交接配置 → 应用配置」会让 github_c2_* 当场消失（审计 §2.2）。
+	// 自定义维权 C2 交接工具独立于内置 C2 开关：ApplyConfig 清空工具后必须重挂，
+	// 否则「保存交接配置 → 应用配置」会让 persistence_c2_* 当场消失。
 	// 闭包持有 *config.Config 指针，工具执行时读到的总是最新配置。
-	configHandler.SetGitHubC2ToolRegistrar(func() error {
-		registerGithubC2Tools(mcpServer, cfg, log.Logger)
+	configHandler.SetPersistenceC2ToolRegistrar(func() error {
+		registerPersistenceC2Tools(mcpServer, cfg, log.Logger)
 		return nil
 	})
 

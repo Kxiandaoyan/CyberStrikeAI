@@ -78,14 +78,20 @@ coverage also backfills history beyond the 5-year corpus window.
   After import, semantic queries by product/vuln-type hit them through the same poc/**
   index glob. Imported content stays local; check the source repo's license before
   redistributing.
-4. **GitHub-C2 handoff (long-term persistence)** — the built-in Beacon has no target-side
-   persistence; this fork adds a handoff chain to an independently deployed GitHub-C2
-   controller: a human builds the agent and saves a target-reachable download URL in the
+4. **Custom persistence-C2 handoff (long-term retention)** — the built-in Beacon has no
+   target-side persistence; this fork adds a handoff chain to **any persistence C2 you deploy
+   yourself**: a human builds/hosts the agent, saves a target-reachable download URL in the
    settings page; CS delivers once via the online Beacon, verifies check-in by
    "hostname + newly-appeared", records it on the blackboard and then stops using that
-   channel. Two read-only MCP tools (`github_c2_handoff_source`, `github_c2_list_agents`
-   with auto re-login) plus a dedicated settings section (credentials write-only) and the
-   `handoff-github-c2` skill.
+   channel. **Integrating your own C2** (the controller runs wherever you deployed it; CS
+   talks HTTP only and never builds agents) requires exactly three endpoints:
+   `POST /login` (form username/password → session cookie), `POST /api/agents/refresh`
+   (channel scan; 4xx ignorable), and `GET /api/agents` (agent-list JSON with
+   hostname/username/os/id/agent_uuid/channel/last_seen/last_reply_ago). Two read-only
+   MCP tools (`persistence_c2_handoff_source`, `persistence_c2_list_agents` with auto
+   re-login) plus a dedicated settings section (credentials write-only), a read-only echo
+   on the sessions page, and the `handoff-persistence-c2` skill (which also forbids using
+   the built-in `c2_task persist` as long-term retention).
 5. **Experience distillation (closeout → human review → library)** — project/batch completion
    auto-generates redacted LLM drafts from blackboard facts (independent cheap model, IPv4
    redaction, min-facts gate, 24h dedup); **humans approve them on the「经验草稿」(drafts)
@@ -121,7 +127,7 @@ cd CyberStrikeAI
 Requirements: Go 1.25+, Python 3, Node ≥ 22 (for local CVE search; optional).
 Open `https://127.0.0.1:8080` (self-signed; `./run.sh --http` for plain HTTP); the bootstrap
 admin password is printed on first start. Enable features via `config.yaml`:
-`zvec_grep.enabled`, `cve_corpus.enabled`, `experience.enabled`, `github_c2.*`.
+`zvec_grep.enabled`, `cve_corpus.enabled`, `experience.enabled`, `persistence_c2.*`.
 
 ### CVE corpus data (extract it yourself)
 
@@ -156,7 +162,7 @@ derived data that any deploy box can fetch with a single curl on the other.
 
 See [Ed1s0nZ/CyberStrikeAI](https://github.com/Ed1s0nZ/CyberStrikeAI) for the original
 project and its documentation. Fork additions live mostly in `internal/cvesync/`,
-`internal/experience/`, `internal/githubc2sidecar/`, `internal/app/github_c2_tools.go`,
+`internal/experience/`, `internal/persistencec2sidecar/`, `internal/app/persistence_c2_tools.go`,
 `internal/app/experience_apply.go` and the matching frontend pages.
 
 ## License

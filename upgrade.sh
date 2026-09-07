@@ -304,8 +304,8 @@ sync_code() {
   rsync_excludes+=( "--exclude=assets/" )
   rsync_excludes+=( "--exclude=data/" )
 
-  # GitHub-C2 embedded controller (future: when copied to {CS}/github-c2/)
-  rsync_excludes+=( "--exclude=github-c2/" )
+  # 自定义维权 C2 embedded controller (future: when copied to {CS}/persistence-c2/)
+  rsync_excludes+=( "--exclude=persistence-c2/" )
 
   # Ensure this upgrade script itself is not deleted.
   rsync_excludes+=( "--exclude=upgrade.sh" )

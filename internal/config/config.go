@@ -19,38 +19,38 @@ import (
 )
 
 type Config struct {
-	Version     string                `yaml:"version,omitempty" json:"version,omitempty"` // 前端显示的版本号，如 v1.3.3
-	Server      ServerConfig          `yaml:"server"`
-	Log         LogConfig             `yaml:"log"`
-	MCP         MCPConfig             `yaml:"mcp"`
-	AI          AIConfig              `yaml:"ai,omitempty" json:"ai,omitempty"`
-	OpenAI      OpenAIConfig          `yaml:"openai,omitempty" json:"openai,omitempty"`
-	FOFA        FofaConfig            `yaml:"fofa,omitempty" json:"fofa,omitempty"`
-	ZoomEye     SpaceSearchConfig     `yaml:"zoomeye,omitempty" json:"zoomeye,omitempty"`
-	Quake       SpaceSearchConfig     `yaml:"quake,omitempty" json:"quake,omitempty"`
-	Shodan      SpaceSearchConfig     `yaml:"shodan,omitempty" json:"shodan,omitempty"`
-	Agent       AgentConfig           `yaml:"agent"`
-	Hitl        HitlConfig            `yaml:"hitl,omitempty" json:"hitl,omitempty"`
-	Security    SecurityConfig        `yaml:"security"`
-	Database    DatabaseConfig        `yaml:"database"`
-	Auth        AuthConfig            `yaml:"auth"`
-	Audit       AuditConfig           `yaml:"audit,omitempty" json:"audit,omitempty"`
-	Monitor     MonitorConfig         `yaml:"monitor,omitempty" json:"monitor,omitempty"`
-	ExternalMCP ExternalMCPConfig     `yaml:"external_mcp,omitempty"`
-	Knowledge   KnowledgeConfig       `yaml:"knowledge,omitempty"`
-	C2          C2Config              `yaml:"c2,omitempty" json:"c2,omitempty"`                 // 内置 C2 总开关；未配置时默认启用
-	ZvecGrep    ZvecGrepConfig        `yaml:"zvec_grep,omitempty" json:"zvec_grep,omitempty"`   // zvec-grep 本地 CVE 检索
-	CVECorpus   CVECorpusConfig       `yaml:"cve_corpus,omitempty" json:"cve_corpus,omitempty"` // CVE 语料同步
-	Experience  ExperienceConfig      `yaml:"experience,omitempty" json:"experience,omitempty"` // 经验总结
-	GitHubC2    GitHubC2EmbedConfig   `yaml:"github_c2,omitempty" json:"github_c2,omitempty"`   // GitHub-C2 交接
-	Robots      RobotsConfig          `yaml:"robots,omitempty" json:"robots,omitempty"`         // 企业微信/钉钉/飞书等机器人配置
-	RolesDir    string                `yaml:"roles_dir,omitempty" json:"roles_dir,omitempty"`   // 角色配置文件目录（新方式）
-	Roles       map[string]RoleConfig `yaml:"roles,omitempty" json:"roles,omitempty"`           // 向后兼容：支持在主配置文件中定义角色
-	SkillsDir   string                `yaml:"skills_dir,omitempty" json:"skills_dir,omitempty"` // Skills配置文件目录
-	AgentsDir   string                `yaml:"agents_dir,omitempty" json:"agents_dir,omitempty"` // 多代理子 Agent Markdown 定义目录（*.md，YAML front matter）
-	MultiAgent  MultiAgentConfig      `yaml:"multi_agent,omitempty" json:"multi_agent,omitempty"`
-	Project     ProjectConfig         `yaml:"project,omitempty" json:"project,omitempty"`
-	Vision      VisionConfig          `yaml:"vision,omitempty" json:"vision,omitempty"`
+	Version       string                   `yaml:"version,omitempty" json:"version,omitempty"` // 前端显示的版本号，如 v1.3.3
+	Server        ServerConfig             `yaml:"server"`
+	Log           LogConfig                `yaml:"log"`
+	MCP           MCPConfig                `yaml:"mcp"`
+	AI            AIConfig                 `yaml:"ai,omitempty" json:"ai,omitempty"`
+	OpenAI        OpenAIConfig             `yaml:"openai,omitempty" json:"openai,omitempty"`
+	FOFA          FofaConfig               `yaml:"fofa,omitempty" json:"fofa,omitempty"`
+	ZoomEye       SpaceSearchConfig        `yaml:"zoomeye,omitempty" json:"zoomeye,omitempty"`
+	Quake         SpaceSearchConfig        `yaml:"quake,omitempty" json:"quake,omitempty"`
+	Shodan        SpaceSearchConfig        `yaml:"shodan,omitempty" json:"shodan,omitempty"`
+	Agent         AgentConfig              `yaml:"agent"`
+	Hitl          HitlConfig               `yaml:"hitl,omitempty" json:"hitl,omitempty"`
+	Security      SecurityConfig           `yaml:"security"`
+	Database      DatabaseConfig           `yaml:"database"`
+	Auth          AuthConfig               `yaml:"auth"`
+	Audit         AuditConfig              `yaml:"audit,omitempty" json:"audit,omitempty"`
+	Monitor       MonitorConfig            `yaml:"monitor,omitempty" json:"monitor,omitempty"`
+	ExternalMCP   ExternalMCPConfig        `yaml:"external_mcp,omitempty"`
+	Knowledge     KnowledgeConfig          `yaml:"knowledge,omitempty"`
+	C2            C2Config                 `yaml:"c2,omitempty" json:"c2,omitempty"`                         // 内置 C2 总开关；未配置时默认启用
+	ZvecGrep      ZvecGrepConfig           `yaml:"zvec_grep,omitempty" json:"zvec_grep,omitempty"`           // zvec-grep 本地 CVE 检索
+	CVECorpus     CVECorpusConfig          `yaml:"cve_corpus,omitempty" json:"cve_corpus,omitempty"`         // CVE 语料同步
+	Experience    ExperienceConfig         `yaml:"experience,omitempty" json:"experience,omitempty"`         // 经验总结
+	PersistenceC2 PersistenceC2EmbedConfig `yaml:"persistence_c2,omitempty" json:"persistence_c2,omitempty"` // 自定义维权 C2 交接
+	Robots        RobotsConfig             `yaml:"robots,omitempty" json:"robots,omitempty"`                 // 企业微信/钉钉/飞书等机器人配置
+	RolesDir      string                   `yaml:"roles_dir,omitempty" json:"roles_dir,omitempty"`           // 角色配置文件目录（新方式）
+	Roles         map[string]RoleConfig    `yaml:"roles,omitempty" json:"roles,omitempty"`                   // 向后兼容：支持在主配置文件中定义角色
+	SkillsDir     string                   `yaml:"skills_dir,omitempty" json:"skills_dir,omitempty"`         // Skills配置文件目录
+	AgentsDir     string                   `yaml:"agents_dir,omitempty" json:"agents_dir,omitempty"`         // 多代理子 Agent Markdown 定义目录（*.md，YAML front matter）
+	MultiAgent    MultiAgentConfig         `yaml:"multi_agent,omitempty" json:"multi_agent,omitempty"`
+	Project       ProjectConfig            `yaml:"project,omitempty" json:"project,omitempty"`
+	Vision        VisionConfig             `yaml:"vision,omitempty" json:"vision,omitempty"`
 }
 
 type EnsureLocalConfigResult struct {
@@ -2043,9 +2043,9 @@ type ZvecGrepConfig struct {
 	HomeDir      string `yaml:"home_dir,omitempty" json:"home_dir,omitempty"`
 }
 
-// GitHubC2EmbedConfig 控制 CS 与 GitHub-C2 的交接集成。
+// PersistenceC2EmbedConfig 控制 CS 与操作员自部署维权 C2 控制器的交接集成。
 // 人编包+人保存下载地址，CS 只投递+验上线。
-type GitHubC2EmbedConfig struct {
+type PersistenceC2EmbedConfig struct {
 	Enabled     bool   `yaml:"enabled,omitempty" json:"enabled,omitempty"`
 	SourceDir   string `yaml:"source_dir,omitempty" json:"source_dir,omitempty"`
 	PythonBin   string `yaml:"python_bin,omitempty" json:"python_bin,omitempty"`
@@ -2126,9 +2126,9 @@ type C2APIUpdate struct {
 	Enabled bool `json:"enabled"`
 }
 
-// GitHubC2HandoffPublic API 响应中的 GitHub-C2 交接字段。
+// PersistenceC2HandoffPublic API 响应中的自定义维权 C2 交接字段。
 // 不返回 WebPass（凭据不下发前端）；密码只写不回显。
-type GitHubC2HandoffPublic struct {
+type PersistenceC2HandoffPublic struct {
 	PayloadURL  string `json:"payload_url"`
 	DropPath    string `json:"drop_path"`
 	WaitSeconds int    `json:"wait_seconds"`
@@ -2139,8 +2139,8 @@ type GitHubC2HandoffPublic struct {
 }
 
 // Public 将内部配置转为安全的 API 响应。
-func (g GitHubC2EmbedConfig) Public() GitHubC2HandoffPublic {
-	return GitHubC2HandoffPublic{
+func (g PersistenceC2EmbedConfig) Public() PersistenceC2HandoffPublic {
+	return PersistenceC2HandoffPublic{
 		PayloadURL:  g.PayloadURL,
 		DropPath:    g.DropPath,
 		WaitSeconds: g.WaitSeconds,
@@ -2151,9 +2151,9 @@ func (g GitHubC2EmbedConfig) Public() GitHubC2HandoffPublic {
 	}
 }
 
-// GitHubC2HandoffUpdate 设置页更新交接配置。
+// PersistenceC2HandoffUpdate 设置页更新交接配置。
 // 三项交接字段 + 控制器连接信息（凭据只写：指针为 nil 表示不变，空串=未设置）。
-type GitHubC2HandoffUpdate struct {
+type PersistenceC2HandoffUpdate struct {
 	PayloadURL  *string `json:"payload_url,omitempty"`
 	DropPath    *string `json:"drop_path,omitempty"`
 	WaitSeconds *int    `json:"wait_seconds,omitempty"`
@@ -2163,7 +2163,7 @@ type GitHubC2HandoffUpdate struct {
 }
 
 // Apply 将更新写入内部配置（指针非 nil 才覆盖）。
-func (g *GitHubC2EmbedConfig) Apply(u *GitHubC2HandoffUpdate) error {
+func (g *PersistenceC2EmbedConfig) Apply(u *PersistenceC2HandoffUpdate) error {
 	if u == nil {
 		return nil
 	}
