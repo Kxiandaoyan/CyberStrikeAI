@@ -41,7 +41,14 @@ document.getElementById('f').addEventListener('submit', function (e) {
         scope: res.d.scope || ''
       }));
     } catch (err) { /* 存储不可用时仅靠 cookie */ }
-    document.cookie = 'auth_token=' + res.d.token + '; path=/; SameSite=Strict';
+    // cookie 生命周期与 token 过期对齐（否则浏览器重启后 token 仍有效却要重登）
+    var maxAge = 0;
+    try {
+      var exp = new Date(res.d.expires_at).getTime();
+      if (!isNaN(exp)) { maxAge = Math.max(0, Math.floor((exp - Date.now()) / 1000)); }
+    } catch (err) { /* 解析失败则用会话 cookie */ }
+    document.cookie = 'auth_token=' + res.d.token +
+      '; path=/; SameSite=Strict' + (maxAge > 0 ? '; max-age=' + maxAge : '');
     location.replace('/');
   }).catch(function () {
     m.textContent = '网络错误';

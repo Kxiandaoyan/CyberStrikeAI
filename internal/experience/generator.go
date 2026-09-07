@@ -348,11 +348,9 @@ func (g *Generator) collectPocDrafts(projectIDs map[string]bool) {
 			if err != nil || exists {
 				continue // one entry per vulnerability ever (rejected = stay rejected)
 			}
-			fkTags := []string{}
-			if cve != "" {
-				fkTags = append(fkTags, cve)
-			}
-			fk, _ := json.Marshal(fkTags)
+			// fact_keys 存检索键（CVE 编号或标题键）：人工批准时弹窗据此预填
+			// applied_to=poc:<key>，同时也是草稿的可检索标签。
+			fk, _ := json.Marshal([]string{key})
 			d := &Draft{
 				ProjectID:  pid,
 				Source:     v.ID,

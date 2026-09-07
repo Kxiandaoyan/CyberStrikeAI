@@ -121,7 +121,7 @@
         if (currentDraft && currentDraft.category === 'poc') {
             try {
                 const fk = JSON.parse(currentDraft.fact_keys || '[]');
-                if (fk.length > 0 && /^CVE-\d{4}-\d{4,}$/.test(fk[0])) def = 'poc:' + fk[0];
+                if (fk.length > 0 && fk[0]) def = 'poc:' + fk[0];
             } catch (e) { /* ignore */ }
             hint = 'POC 沉淀 — 写入本地实战库 data/corpus/poc/（同步不覆盖、不入公开仓库）。回车确认，或改成 skill:技能名 / 留空入知识库:';
         }
