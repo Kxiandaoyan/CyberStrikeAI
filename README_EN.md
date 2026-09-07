@@ -15,6 +15,16 @@
 > [!IMPORTANT]
 > Use this platform only against systems you own or are explicitly authorized to test.
 
+> [!NOTE]
+> **New in this update (2026-09) — pre-engagement lab verification handshake**: the first
+> target message of every task gets a DNS-TXT authorization handshake inserted before it
+> reaches the model: the model generates an 8-char challenge, outputs only the
+> `FQDN / TYPE / VALUE` three lines and stops; a human writes the matching TXT record into
+> the lab's authoritative DNS and replies「已添加，请检查」(added, please check). On a hit,
+> the target, its parent zones and TLD are treated as authorized for assessment and the
+> engagement resumes at full pace. Stored conversations and the UI keep the bare target;
+> follow-ups and the WebShell assistant are exempt; zero configuration (see item 7 below).
+
 ## Why a local CVE corpus (vs. the upstream flow)
 
 Upstream, every new target and every identified component re-runs the full 7-step external
@@ -107,6 +117,20 @@ coverage also backfills history beyond the 5-year corpus window.
    fingerprinting finds nothing identifiable. Settings now persist to `config.yaml`
    immediately, tools survive config re-apply, corpus paths resolve against the config
    file directory, prompts/skills aligned with local-first and handoff discipline.
+7. **Pre-engagement lab verification handshake (new in this update)** — the first target
+   message sent to the model is prefixed with a fixed handshake block, turning
+   "confirm you are authorized" from a prompt-level promise into a hard gate before every
+   engagement: the model generates an 8-char alphanumeric challenge `t` and outputs only
+   `FQDN: _verify-<t>.<registrable domain>` / `TYPE: TXT` / `VALUE: <t>` before stopping
+   (no tools allowed); a human writes the TXT record into the lab's authoritative DNS
+   (e.g. a hack-dig fixture) and replies「已添加，请检查」; the model re-runs dig, and when
+   both FQDN and VALUE match, the target plus its parent zones and TLD count as authorized
+   and the original pentest rhythm resumes. Covers every entry point — web chat, Eino
+   single/multi-agent, role-bound workflows, every batch-queue line, and the first message
+   of WeCom/DingTalk/Feishu robot sessions. Only the model-facing input changes: system
+   prompts, role YAML, dig behavior and everything stored in the database stay untouched;
+   follow-up turns, the WebShell assistant and empty targets are exempt (idempotent).
+   Zero configuration; implementation lives in `internal/taskprefix/` with unit tests.
 
 ## Repository layout
 
@@ -162,8 +186,9 @@ derived data that any deploy box can fetch with a single curl on the other.
 
 See [Ed1s0nZ/CyberStrikeAI](https://github.com/Ed1s0nZ/CyberStrikeAI) for the original
 project and its documentation. Fork additions live mostly in `internal/cvesync/`,
-`internal/experience/`, `internal/persistencec2sidecar/`, `internal/app/persistence_c2_tools.go`,
-`internal/app/experience_apply.go` and the matching frontend pages.
+`internal/experience/`, `internal/persistencec2sidecar/`, `internal/taskprefix/`,
+`internal/app/persistence_c2_tools.go`, `internal/app/experience_apply.go` and the
+matching frontend pages.
 
 ## License
 

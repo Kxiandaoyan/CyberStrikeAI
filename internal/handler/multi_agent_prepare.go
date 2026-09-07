@@ -10,6 +10,7 @@ import (
 	"cyberstrike-ai/internal/database"
 	"cyberstrike-ai/internal/mcp/builtin"
 	"cyberstrike-ai/internal/security"
+	"cyberstrike-ai/internal/taskprefix"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -144,13 +145,16 @@ func (h *AgentHandler) prepareMultiAgentSession(req *ChatRequest, c *gin.Context
 			builtin.ToolListKnowledgeRiskTypes,
 			builtin.ToolSearchKnowledgeBase,
 		}
-	} else if req.Role != "" && req.Role != "默认" && h.config != nil && h.config.Roles != nil {
-		if role, exists := h.config.Roles[req.Role]; exists && role.Enabled {
-			if role.UserPrompt != "" {
-				finalMessage = role.UserPrompt + "\n\n" + req.Message
+	} else {
+		// WebShell 不加握手。对话仅任务首条（无历史）加，跟轮保持原消息。
+		rolePrompt := ""
+		if req.Role != "" && req.Role != "默认" && h.config != nil && h.config.Roles != nil {
+			if role, exists := h.config.Roles[req.Role]; exists && role.Enabled {
+				rolePrompt = role.UserPrompt
+				roleTools = role.Tools
 			}
-			roleTools = role.Tools
 		}
+		finalMessage = taskprefix.Apply(rolePrompt, req.Message, len(agentHistoryMessages) == 0)
 	}
 
 	var savedPaths []string

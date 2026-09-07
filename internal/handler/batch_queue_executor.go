@@ -16,6 +16,7 @@ import (
 	"cyberstrike-ai/internal/database"
 	"cyberstrike-ai/internal/mcp"
 	"cyberstrike-ai/internal/multiagent"
+	"cyberstrike-ai/internal/taskprefix"
 
 	"go.uber.org/zap"
 )
@@ -144,13 +145,13 @@ func (h *AgentHandler) executeOneBatchSubTask(queueID string, queue *BatchTaskQu
 
 	h.batchTaskManager.UpdateTaskStatusWithConversationID(queueID, task.ID, BatchTaskStatusRunning, "", "", conversationID)
 
-	finalMessage := task.Message
+	rolePrompt := ""
 	var roleTools []string
 	if queue.Role != "" && queue.Role != "默认" {
 		if h.config.Roles != nil {
 			if role, exists := h.config.Roles[queue.Role]; exists && role.Enabled {
 				if role.UserPrompt != "" {
-					finalMessage = role.UserPrompt + "\n\n" + task.Message
+					rolePrompt = role.UserPrompt
 					h.logger.Info("应用角色用户提示词", zap.String("queueId", queueID), zap.String("taskId", task.ID), zap.String("role", queue.Role))
 				}
 				if len(role.Tools) > 0 {
@@ -160,6 +161,8 @@ func (h *AgentHandler) executeOneBatchSubTask(queueID string, queue *BatchTaskQu
 			}
 		}
 	}
+	// 每条子任务新建会话，始终在目标前插入握手；落库仍用裸 task.Message。
+	finalMessage := taskprefix.Apply(rolePrompt, task.Message, true)
 
 	if _, err = h.db.AddMessage(conversationID, "user", task.Message, nil); err != nil {
 		h.logger.Error("保存用户消息失败", zap.String("queueId", queueID), zap.String("taskId", task.ID), zap.String("conversationId", conversationID), zap.Error(err))

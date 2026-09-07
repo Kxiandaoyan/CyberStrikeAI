@@ -27,6 +27,7 @@ import (
 	"cyberstrike-ai/internal/openai"
 	"cyberstrike-ai/internal/reasoning"
 	"cyberstrike-ai/internal/security"
+	"cyberstrike-ai/internal/taskprefix"
 
 	"github.com/gin-gonic/gin"
 	"github.com/robfig/cron/v3"
@@ -874,16 +875,16 @@ func (h *AgentHandler) ProcessMessageForRobot(ctx context.Context, platform stri
 		}
 	}
 
-	finalMessage := message
+	rolePrompt := ""
 	var roleTools []string
 	if role != "" && role != "默认" && h.config.Roles != nil {
 		if r, exists := h.config.Roles[role]; exists && r.Enabled {
-			if r.UserPrompt != "" {
-				finalMessage = r.UserPrompt + "\n\n" + message
-			}
+			rolePrompt = r.UserPrompt
 			roleTools = r.Tools
 		}
 	}
+	// 机器人仅会话首条（无历史）加握手；落库仍用裸 message。
+	finalMessage := taskprefix.Apply(rolePrompt, message, len(agentHistoryMessages) == 0)
 
 	if _, err = h.db.AddMessage(conversationID, "user", message, nil); err != nil {
 		return "", "", fmt.Errorf("保存用户消息失败: %w", err)
