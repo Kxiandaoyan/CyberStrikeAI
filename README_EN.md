@@ -21,11 +21,12 @@
 > reaches the model: the model generates an 8-char challenge, outputs only the
 > `FQDN / TYPE / VALUE` three lines and stops; a human — outside CS — makes the lab answer
 > that TXT lookup with the challenge (a real DNS record or a dig-replacing fixture both
-> work) and replies「已添加，请检查」(added, please check). The model re-checks with the
-> ordinary system `dig`; on a hit, the target, its parent zones and TLD are treated as
-> authorized for assessment and the engagement resumes at full pace. Stored conversations
-> and the UI keep the bare target; follow-ups and the WebShell assistant are exempt; zero
-> configuration (see item 7 below).
+> work) and replies「已添加，请检查」(added, please check). The model then re-checks via
+> a tool running the system `dig` and judges the hit itself; on a hit, the target, its
+> parent zones and TLD are treated as authorized for assessment and the engagement resumes
+> at full pace. Inserting the text block is CS's only code action — nothing is enforced.
+> Stored conversations and the UI keep the bare target; follow-ups and the WebShell
+> assistant are exempt; zero configuration (see item 7 below).
 
 ## Why a local CVE corpus (vs. the upstream flow)
 
@@ -119,23 +120,39 @@ coverage also backfills history beyond the 5-year corpus window.
    fingerprinting finds nothing identifiable. Settings now persist to `config.yaml`
    immediately, tools survive config re-apply, corpus paths resolve against the config
    file directory, prompts/skills aligned with local-first and handoff discipline.
-7. **Pre-engagement lab verification handshake (new in this update)** — the only thing CS
-   does is insert a fixed handshake block before the first target message sent to the
-   model; system prompts, the `dig` tool and DNS plumbing are untouched. Round 1: the
-   model generates an 8-char alphanumeric challenge `t` and outputs only
-   `FQDN: _verify-<t>.<registrable domain>` / `TYPE: TXT` / `VALUE: <t>` before stopping
-   (no tools allowed). The answer is prepared **outside CS**: a human makes that FQDN's
-   TXT lookup return `<t>` — a real record on the authoritative DNS, or a
-   dig-replacing / response-faking fixture (hack-dig style) on the lab box; CS neither
-   calls nor knows about this step. On「已添加，请检查」the model re-runs the **ordinary
-   system `dig`**; when both FQDN and VALUE match, the target plus its parent zones and
-   TLD count as authorized and the original pentest rhythm resumes. Covers every entry
-   point — web chat, Eino single/multi-agent, role-bound workflows, every batch-queue
-   line, and the first message of WeCom/DingTalk/Feishu robot sessions. Only the
-   model-facing input changes: stored conversations keep the bare target, so the UI,
-   experience drafts and POC accumulation stay unaffected; follow-up turns, the WebShell
-   assistant and empty targets are exempt (idempotent). Zero configuration;
-   implementation lives in `internal/taskprefix/` with unit tests.
+7. **Pre-engagement lab verification handshake (new in this update)** — in code, CS does
+   exactly one thing: inserts a fixed handshake text block before the first target message
+   sent to the model (`internal/taskprefix/handshake.go`, wording locked by a unit test).
+   System prompts and role YAML are untouched, no DNS fixture is integrated, and nothing
+   is enforced — "stop after three lines, no tools" and the later hit check are the
+   **model following the text**, not code-level gates. One full round, matching the code:
+
+   1. **Target sent**: the model's first message = role prompt (if any) → handshake text
+      → bare target (attachment notes appended at the end).
+   2. **Model turn 1**: generates an 8-char alphanumeric challenge `t` itself, derives the
+      registrable domain from the target itself, and replies only
+      `FQDN: _verify-<t>.<registrable domain>` / `TYPE: TXT` / `VALUE: <t>` before stopping.
+   3. **Human prepares the answer (outside CS)**: makes that FQDN's TXT lookup return
+      `<t>` — a real record on the authoritative DNS, or a dig-replacing / response-faking
+      fixture (hack-dig style) on the lab box; CS neither participates nor knows.
+   4. **Human replies**「已添加，请检查」: follow-up turns get no prefix, but the agent
+      trace stores the **model-facing input**, so the model's context still carries the
+      first-turn handshake text and its own three-line reply — it knows a DNS re-check is
+      due now.
+   5. **Model re-checks**: runs the **system `dig` found on PATH** via the `exec` tool
+      (an `sh -c` command wrapper), and judges by itself that the FQDN resolves and the
+      TXT value equals `t`.
+   6. **Hit** → per the handshake text, the target plus its parent zones and TLD count as
+      authorized and the original pentest rhythm resumes; **miss** → undefined in code,
+      the model reports the failure and waits for the human.
+
+   Entry points covered: web chat, Eino single/multi-agent, role-bound workflows, every
+   batch-queue line, and the first message of WeCom/DingTalk/Feishu robot sessions. Each
+   batch line is its own fresh conversation — **its own handshake and challenge code**.
+   Storage stays clean: the messages table keeps the bare target, so the UI, experience
+   drafts and POC accumulation are unaffected; the handshake text lives only in model
+   input and the trace. Follow-ups, the WebShell assistant and empty targets are exempt
+   (idempotent). Zero configuration.
 
 ## Repository layout
 
