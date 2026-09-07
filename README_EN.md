@@ -63,6 +63,14 @@ coverage also backfills history beyond the 5-year corpus window.
    (reviewer=auto, full content). The daily sync never touches the POC layer; `data/` is
    git-ignored so combat records never reach the public repo. Next engagement:
    `fts + globs:["poc/**"]` pulls the recipe directly.
+- **Third-party POC collections can be imported** (wiki-style repos mostly named
+  「component + vuln type」, often without CVE ids):
+  `python tools/import_poc_repo.py <cloned repo> data/corpus/poc --source-name <origin>`
+  — Chinese filenames preserved, CVE ids extracted from names/content into frontmatter,
+  `category` distinguishes imports from auto-filed combat records, idempotent re-runs.
+  After import, semantic queries by product/vuln-type hit them through the same poc/**
+  index glob. Imported content stays local; check the source repo's license before
+  redistributing.
 4. **GitHub-C2 handoff (long-term persistence)** — the built-in Beacon has no target-side
    persistence; this fork adds a handoff chain to an independently deployed GitHub-C2
    controller: a human builds the agent and saves a target-reachable download URL in the

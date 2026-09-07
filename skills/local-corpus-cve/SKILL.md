@@ -49,6 +49,16 @@ limit ≤ 8。可 `globs: ["cve/2025/**"]`。
 - 实战层没有 → 外网按该 CVE-ID 定向搜 PoC/分析（见 component-vuln-intel）
 - 实战记录是历史交战产物：目标是变化的，复用前必须验证前提，禁止无核对直接打
 
+实战层还包含**导入的第三方 POC 集**（`category: imported-poc`，多为「组件名+漏洞类型」命名、
+约八成无 CVE 编号）。查法改为语义查询：
+
+```
+{"root":"...","query":"Tomcat 任意文件读取 RCE","globs":["poc/**"],"limit":8}
+```
+
+有编号的导入条目同样可用 fts 编号拉取（编号在其 frontmatter）。导入来源与日期见各文件
+frontmatter 的 `source` / `imported`；导入内容是公开 POC 复现，可信度按 tentative 对待。
+
 ## 落到黑板上
 
 有编号+目标版本 → `upsert_project_fact`，key 如 `intel/cve-2024-23897`，confidence=tentative，body 只记「语料摘要 + 目标版本是否匹配」，不记 POC。

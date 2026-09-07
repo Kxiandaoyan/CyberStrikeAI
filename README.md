@@ -63,6 +63,11 @@ CVE 库 → 搜索引擎×3 → 中文社区 → GitHub 搜 PoC → 资产引擎
 - 安全边界：每日同步永不覆盖实战层（cvesync 只写 `cve/{year}/`）；`data/` 被 gitignore，
   **实战记录永不出现在公开仓库**；方法论入库的 auto_apply 仍恒为 false（见下节）。
 - 下次交战命中编号后：`fts + globs:["poc/**"]` 直接拉实战记录，核对前提后复用。
+- **可导入第三方 POC 集**（如 Vulnerability-Wiki-PoC 类仓库，多为「组件名+漏洞类型」命名、
+  大多无 CVE 编号）：`python tools/import_poc_repo.py <已克隆的仓库> data/corpus/poc --source-name <来源>`
+  —— 中文文件名保留、文件名/正文中的 CVE 编号提取进 frontmatter、与交战自动沉淀用
+  `category` 区分、重跑幂等。导入后产品名/漏洞类型的语义检索即可命中（同一 poc/** 索引 glob）。
+  导入内容仅存本机；对外分发需自行确认源仓库许可。
 
 ### 4. GitHub-C2 交接（长期维权 handoff）
 - 内置 C2 Beacon 没有目标侧自启动/长期维权；本版本新增与独立部署的 GitHub-C2 控制器的
