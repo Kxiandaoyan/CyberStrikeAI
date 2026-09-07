@@ -36,6 +36,11 @@ files the POC (IPv4-redacted; `poc_auto_apply` on by default, can be switched ba
 into `data/corpus/poc/` → **engagement N+1 hits it locally and never searches the web for it again**.
 The system gets faster and smarter with every engagement.
 
+**Local accelerates, never truncates**: on a local miss the full upstream external sequence runs
+unchanged, step for step — a miss may be a keyword miss (component aliases / naming variants)
+rather than absence of records, the external sources cross-cover each other, and their all-years
+coverage also backfills history beyond the 5-year corpus window.
+
 ## What's added on top of upstream
 
 1. **Local 5-year CVE corpus (offline-first vuln intel)** — official cvelistV5 data distilled
