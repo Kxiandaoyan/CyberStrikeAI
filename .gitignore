@@ -29,6 +29,7 @@ skills/.eino/
 # Build outputs
 cyberstrike-ai
 cyberstrike-ai.exe
+.tools/
 *.test
 bin/
 dist/

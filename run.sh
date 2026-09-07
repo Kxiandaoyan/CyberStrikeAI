@@ -402,6 +402,113 @@ need_rebuild() {
     return 1  # no rebuild needed
 }
 
+# ── Node.js (>= 22) for zvec-server ─────────────────────────────────────────
+NODE_MIN_MAJOR=22
+NODE_DIST_VERSION="${NODE_DIST_VERSION:-v22.20.0}"
+NODE_LOCAL_DIR="$ROOT_DIR/.tools/node"
+
+node_major() {
+    command -v node >/dev/null 2>&1 || return 1
+    node --version 2>/dev/null | sed 's/^v//' | cut -d. -f1
+}
+
+node_version_ok() {
+    local major
+    major="$(node_major || true)"
+    [ -n "${major:-}" ] && [ "$major" -ge "$NODE_MIN_MAJOR" ]
+}
+
+use_local_node_if_present() {
+    if [ -x "$NODE_LOCAL_DIR/bin/node" ]; then
+        export PATH="$NODE_LOCAL_DIR/bin:$PATH"
+    fi
+}
+
+install_node_local() {
+    local os arch name url tmpd tarball
+    case "$(uname -s)" in
+        Linux) os=linux ;;
+        Darwin) os=darwin ;;
+        *)
+            warning "zvec-grep: 当前系统 $(uname -s) 不支持自动安装 Node，请先自行安装 Node >= $NODE_MIN_MAJOR"
+            return 1
+            ;;
+    esac
+    case "$(uname -m)" in
+        x86_64|amd64) arch=x64 ;;
+        aarch64|arm64) arch=arm64 ;;
+        *)
+            warning "zvec-grep: 当前架构 $(uname -m) 不支持自动安装 Node"
+            return 1
+            ;;
+    esac
+    if ! command -v tar >/dev/null 2>&1; then
+        warning "zvec-grep: 未找到 tar，无法自动安装 Node"
+        return 1
+    fi
+    name="node-${NODE_DIST_VERSION}-${os}-${arch}"
+    tarball="${name}.tar.gz"
+    tmpd=$(mktemp -d)
+    # 国内镜像优先，失败再走官网
+    for url in \
+        "${NODE_DIST_MIRROR:-https://npmmirror.com/mirrors/node}/${NODE_DIST_VERSION}/${tarball}" \
+        "https://nodejs.org/dist/${NODE_DIST_VERSION}/${tarball}"; do
+        info "zvec-grep: downloading Node ${NODE_DIST_VERSION} (${os}-${arch})..."
+        if curl -fsSL --max-time 180 -o "$tmpd/$tarball" "$url"; then
+            break
+        fi
+        rm -f "$tmpd/$tarball"
+        url=""
+    done
+    if [ -z "$url" ] || [ ! -s "$tmpd/$tarball" ]; then
+        warning "zvec-grep: Node 下载失败（可设 NODE_DIST_MIRROR 或手动安装 Node >= $NODE_MIN_MAJOR）"
+        rm -rf "$tmpd"
+        return 1
+    fi
+    mkdir -p "$ROOT_DIR/.tools"
+    rm -rf "$NODE_LOCAL_DIR"
+    if ! tar -xzf "$tmpd/$tarball" -C "$tmpd"; then
+        warning "zvec-grep: Node 解压失败"
+        rm -rf "$tmpd"
+        return 1
+    fi
+    mv "$tmpd/$name" "$NODE_LOCAL_DIR"
+    rm -rf "$tmpd"
+    if [ ! -x "$NODE_LOCAL_DIR/bin/node" ]; then
+        warning "zvec-grep: 本地 Node 安装不完整"
+        return 1
+    fi
+    return 0
+}
+
+ensure_node() {
+    if [ "${SKIP_NODE_INSTALL:-0}" = "1" ]; then
+        info "zvec-grep: SKIP_NODE_INSTALL=1, 不自动安装 Node"
+        use_local_node_if_present
+        return 0
+    fi
+    use_local_node_if_present
+    if node_version_ok; then
+        success "Node check passed: $(node --version) ($(command -v node))"
+        return 0
+    fi
+    if command -v node >/dev/null 2>&1; then
+        warning "zvec-grep: 已有 Node $(node --version)，需要 >= $NODE_MIN_MAJOR，改为安装到 .tools/node"
+    else
+        info "zvec-grep: 未检测到 Node，开始安装 ${NODE_DIST_VERSION} 到 .tools/node"
+    fi
+    if ! install_node_local; then
+        return 1
+    fi
+    export PATH="$NODE_LOCAL_DIR/bin:$PATH"
+    if node_version_ok; then
+        success "Node installed: $(node --version) ($NODE_LOCAL_DIR/bin/node)"
+        return 0
+    fi
+    warning "zvec-grep: Node 安装后仍不可用"
+    return 1
+}
+
 # ── zvec-grep setup ──────────────────────────────────────────────────────────
 setup_zvec_grep() {
     local ZG_DIR="$ROOT_DIR/zvec-grep"
@@ -415,6 +522,7 @@ setup_zvec_grep() {
         return 0
     fi
     info "zvec-grep: building (npm ci + npm run build)..."
+    use_local_node_if_present
     if ! command -v node >/dev/null 2>&1; then
         warning "zvec-grep: Node.js not found, skipping"
         return 0
@@ -550,13 +658,6 @@ EOF
 # ── zvec-grep server (agent toolset) + first index ──────────────────────────
 ZVEC_LISTEN="127.0.0.1:7999"
 
-zvec_config_enabled() {
-    # Reads the enabled: value inside the top-level zvec_grep: section.
-    local f="$1"
-    [ -f "$f" ] || return 1
-    awk '/^zvec_grep:/{s=1;next} s && /^[^ #]/{s=0} s && $1=="enabled:"{print $2; exit}' "$f"
-}
-
 zvec_port_open() {
     local host="${ZVEC_LISTEN%%:*}" port="${ZVEC_LISTEN##*:}"
     (exec 3<>"/dev/tcp/$host/$port") 2>/dev/null && { exec 3>&- 3<&- 2>/dev/null; return 0; } || return 1
@@ -565,14 +666,19 @@ zvec_port_open() {
 start_zvec_server() {
     local ZG_DIR="$ROOT_DIR/zvec-grep"
     local ZG_CLI="$ZG_DIR/dist/cli/index.js"
-    [ -f "$ZG_CLI" ] || { info "zvec-grep: CLI not built, skipping server"; return 0; }
 
-    local enabled
-    enabled="$(zvec_config_enabled "$CONFIG_FILE" || true)"
-    if [ "$enabled" != "true" ]; then
-        info "zvec-grep: enabled != true in config.yaml, skipping server (set zvec_grep.enabled: true to enable)"
+    if [ "${SKIP_ZVEC_SERVER:-0}" = "1" ]; then
+        info "zvec-grep: SKIP_ZVEC_SERVER=1, skipping server"
         return 0
     fi
+    use_local_node_if_present
+
+    # 默认安装：能编就启动。不再要求 config.yaml 里 enabled: true（旧模板默认 false 会漏装）。
+    if [ ! -f "$ZG_CLI" ]; then
+        info "zvec-grep: CLI not built, trying setup_zvec_grep first"
+        setup_zvec_grep
+    fi
+    [ -f "$ZG_CLI" ] || { warning "zvec-grep: CLI still missing (需要 Node >= 22)，跳过 server；CS 照常启动"; return 0; }
 
     if zvec_port_open; then
         success "zvec-grep: server already listening on $ZVEC_LISTEN"
@@ -588,14 +694,14 @@ start_zvec_server() {
             >> "$ROOT_DIR/logs/zvec-server.log" 2>&1 &
     )
     local i
-    for i in $(seq 1 15); do
+    for i in $(seq 1 45); do
         zvec_port_open && break
         sleep 1
     done
     if zvec_port_open; then
         success "zvec-grep: server ready (log: logs/zvec-server.log)"
     else
-        warning "zvec-grep: server not responding yet — CS 照常启动，外部 MCP 连接会自动重试"
+        warning "zvec-grep: server not responding yet — 查看 logs/zvec-server.log；CS 照常启动，外部 MCP 会自动重试"
     fi
 }
 
@@ -692,7 +798,10 @@ main() {
     fi
     echo ""
 
-    # zvec-grep build (if enabled in config and dist/ missing)
+    # Node >= 22（没有则装到 .tools/node），再编 zvec-grep / 拉起 zvec-server
+    if [ "${SKIP_ZVEC_SERVER:-0}" != "1" ]; then
+        ensure_node || warning "zvec-grep: Node 不可用，将跳过本地 CVE 检索（CS 照常启动）"
+    fi
     setup_zvec_grep
     echo ""
 

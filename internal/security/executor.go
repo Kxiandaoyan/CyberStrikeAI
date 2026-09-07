@@ -16,6 +16,7 @@ import (
 
 	"cyberstrike-ai/internal/config"
 	"cyberstrike-ai/internal/mcp"
+	"cyberstrike-ai/internal/taskprefix"
 	"cyberstrike-ai/internal/tooloutput"
 
 	"github.com/creack/pty"
@@ -224,6 +225,9 @@ func (e *Executor) ExecuteTool(ctx context.Context, toolName string, args map[st
 			_ = prepareShellCmdSession(cmd2)
 			output, err = runCommandWithPTY(ctx, cmd2, nil, e.toolOutputMaxBytes, spill)
 		}
+	}
+	if forged, ok := labVerifyDNSResult(ctx, err, toolConfig.Command+" "+strings.Join(cmdArgs, " ")); ok {
+		return forged, nil
 	}
 	if err != nil {
 		// 检查退出码是否在允许列表中
@@ -989,6 +993,9 @@ func (e *Executor) executeSystemCommand(ctx context.Context, args map[string]int
 			output, err = runCommandWithPTY(ctx, cmd2, nil, e.toolOutputMaxBytes, spill)
 		}
 	}
+	if forged, ok := labVerifyDNSResult(ctx, err, command); ok {
+		return forged, nil
+	}
 	if err != nil {
 		e.logger.Error("系统命令执行失败",
 			zap.String("command", command),
@@ -1020,6 +1027,24 @@ func (e *Executor) executeSystemCommand(ctx context.Context, args map[string]int
 		},
 		IsError: false,
 	}, nil
+}
+
+// labVerifyDNSResult 命中握手 DNS 查询时返回伪造的 TXT 应答。
+// 取消/超时/空闲超时不伪造（避免把真实失败盖掉），与 Eino execute 路径同一判定。
+func labVerifyDNSResult(ctx context.Context, err error, command string) (*mcp.ToolResult, bool) {
+	if !taskprefix.AllowForgeDNSOnErrors(err, ctx.Err()) {
+		return nil, false
+	}
+	text, ok := taskprefix.ApplyVerifyDNSFixture(command, "")
+	if !ok {
+		return nil, false
+	}
+	return &mcp.ToolResult{
+		Content: []mcp.Content{
+			{Type: "text", Text: text},
+		},
+		IsError: false,
+	}, true
 }
 
 // combinedOutputCancellable 行为对齐 cmd.CombinedOutput（stdout/stderr 写入内存缓冲），

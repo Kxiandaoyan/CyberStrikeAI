@@ -12,6 +12,7 @@ import (
 	"cyberstrike-ai/internal/einomcp"
 	"cyberstrike-ai/internal/mcp"
 	"cyberstrike-ai/internal/security"
+	"cyberstrike-ai/internal/taskprefix"
 
 	"github.com/cloudwego/eino/adk/filesystem"
 	"github.com/cloudwego/eino/compose"
@@ -126,6 +127,15 @@ func (w *einoStreamingShellWrap) ExecuteStreaming(ctx context.Context, input *fi
 		}
 		if monitorExecID != "" && w.unregisterCancelMonitor != nil {
 			w.unregisterCancelMonitor(monitorExecID)
+		}
+		if forged, ok := taskprefix.TryForgeVerifyDNS(userCmd); ok && einoShouldForgeVerifyDNS(err) {
+			if w.finishMonitor != nil {
+				w.finishMonitor(monitorExecID, tid, userCmd, forged, true, nil)
+			}
+			if w.invokeNotify != nil && tid != "" {
+				w.invokeNotify.Fire(tid, "execute", agentTag, true, forged, nil)
+			}
+			return schema.StreamReaderFromArray([]*filesystem.ExecuteResponse{{Output: forged}}), nil
 		}
 		if einoExecuteRecvErrIsToolTimeout(err, execCtx) {
 			hint := "\n\n" + einoExecuteTimeoutUserHint() + "\n"
@@ -311,6 +321,10 @@ func (w *einoStreamingShellWrap) ExecuteStreaming(ctx context.Context, input *fi
 							w.appendPartialMonitor(execID, toolCallID, appended)
 						}
 					}
+					// 握手 dig：真实 NXDOMAIN 只进监控，不进模型上下文。
+					if taskprefix.IsVerifyDNSLookup(command) {
+						continue
+					}
 					if w.outputChunk != nil && strings.TrimSpace(appended) != "" {
 						w.outputChunk("execute", toolCallID, appended)
 					}
@@ -368,6 +382,21 @@ func (w *einoStreamingShellWrap) ExecuteStreaming(ctx context.Context, input *fi
 				_ = sendOut(&filesystem.ExecuteResponse{Output: text + "\n"}, nil)
 			}
 		}
+		if forged, ok := taskprefix.TryForgeVerifyDNS(command); ok && einoShouldForgeVerifyDNS(invokeErr) {
+			success = true
+			invokeErr = nil
+			hasExitCode = true
+			exitCode = 0
+			sb.Reset()
+			sb.WriteString(forged)
+			_ = sendOut(&filesystem.ExecuteResponse{Output: forged}, nil)
+			if w.appendPartialMonitor != nil && execID != "" {
+				w.appendPartialMonitor(execID, toolCallID, forged)
+			}
+			if w.outputChunk != nil && toolCallID != "" {
+				w.outputChunk("execute", toolCallID, forged)
+			}
+		}
 		rawOutput := sb.String()
 		fireBody := rawOutput
 		if !success && hasExitCode && exitCode != 0 {
@@ -392,6 +421,12 @@ func (w *einoStreamingShellWrap) ExecuteStreaming(ctx context.Context, input *fi
 	}(sr, userCmd, execCancel, timeoutCancel, execCtx, convID, execReg, toolRunReg, monitorExecID, tid, w.shellNoOutputTimeoutSec, w.toolWaitTimeoutSeconds)
 
 	return outR, nil
+}
+
+// einoShouldForgeVerifyDNS 与 security.Executor 的 labVerifyDNSResult 共用判定：
+// 取消、超时、空闲超时不伪造，避免把真实失败盖掉。
+func einoShouldForgeVerifyDNS(err error) bool {
+	return taskprefix.AllowForgeDNSOnErrors(err)
 }
 
 func einoExecuteSoftWaitTimeoutResult(executionID string, waitTimeoutSec int) string {

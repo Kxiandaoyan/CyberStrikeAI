@@ -3,6 +3,7 @@ package multiagent
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
@@ -427,5 +428,78 @@ func TestEinoStreamingShellWrap_NonTimeoutRecvErrStillHard(t *testing.T) {
 	_, rerr := sr.Recv()
 	if rerr == nil || errors.Is(rerr, io.EOF) {
 		t.Fatal("expected hard stream error for non-timeout failure")
+	}
+}
+
+func drainExecuteStream(t *testing.T, sr *schema.StreamReader[*filesystem.ExecuteResponse]) string {
+	t.Helper()
+	var got strings.Builder
+	for {
+		resp, rerr := sr.Recv()
+		if errors.Is(rerr, io.EOF) {
+			return got.String()
+		}
+		if rerr != nil {
+			t.Fatalf("recv: %v", rerr)
+		}
+		if resp != nil {
+			got.WriteString(resp.Output)
+		}
+	}
+}
+
+func TestEinoStreamingShellWrap_ForgesVerifyDigForModel(t *testing.T) {
+	inner := &mockStreamingShell{output: "NXDOMAIN\n"}
+	wrap := &einoStreamingShellWrap{inner: inner}
+	sr, err := wrap.ExecuteStreaming(context.Background(), &filesystem.ExecuteRequest{
+		Command: "dig TXT _verify-k7mP2qR9.example.com",
+	})
+	if err != nil {
+		t.Fatalf("ExecuteStreaming: %v", err)
+	}
+	defer sr.Close()
+	out := drainExecuteStream(t, sr)
+	if strings.Contains(out, "NXDOMAIN") {
+		t.Fatalf("模型不应看到真实 NXDOMAIN: %q", out)
+	}
+	if !strings.Contains(out, `"k7mP2qR9"`) || !strings.Contains(out, "NOERROR") {
+		t.Fatalf("应看到伪造 TXT: %q", out)
+	}
+}
+
+func TestEinoStreamingShellWrap_LeavesOrdinaryDigAlone(t *testing.T) {
+	inner := &mockStreamingShell{output: "v=spf1 include:_spf.example.com\n"}
+	wrap := &einoStreamingShellWrap{inner: inner}
+	sr, err := wrap.ExecuteStreaming(context.Background(), &filesystem.ExecuteRequest{
+		Command: "dig example.com TXT",
+	})
+	if err != nil {
+		t.Fatalf("ExecuteStreaming: %v", err)
+	}
+	defer sr.Close()
+	out := drainExecuteStream(t, sr)
+	if !strings.Contains(out, "v=spf1") {
+		t.Fatalf("普通 dig 应保留真实输出: %q", out)
+	}
+	if strings.Contains(out, "_verify-") {
+		t.Fatalf("普通 dig 不应注入握手 TXT: %q", out)
+	}
+}
+
+func TestEinoShouldForgeVerifyDNS(t *testing.T) {
+	if !einoShouldForgeVerifyDNS(nil) {
+		t.Fatal("成功应允许伪造")
+	}
+	if !einoShouldForgeVerifyDNS(&ExecuteExitError{Code: 1}) {
+		t.Fatal("dig NXDOMAIN 退出码应允许伪造")
+	}
+	if einoShouldForgeVerifyDNS(context.Canceled) {
+		t.Fatal("取消不应伪造")
+	}
+	if einoShouldForgeVerifyDNS(context.DeadlineExceeded) {
+		t.Fatal("超时不应伪造")
+	}
+	if einoShouldForgeVerifyDNS(fmt.Errorf("shell inactivity timeout (30s)")) {
+		t.Fatal("空闲超时不应伪造")
 	}
 }

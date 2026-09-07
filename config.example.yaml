@@ -369,7 +369,7 @@ mcp:
 # 外部 MCP 配置
 external_mcp:
   servers:
-    # zvec-grep：本地 CVE 检索（run.sh 自动构建并以 agent 工具集启动 server；enabled=true 时 CS 自动登记本条目）
+    # zvec-grep：本地 CVE 检索（./run.sh 默认构建并启动 127.0.0.1:7999；不想装设 SKIP_ZVEC_SERVER=1）
     zvec-grep:
       type: http
       url: http://127.0.0.1:7999/mcp
@@ -378,9 +378,9 @@ external_mcp:
       max_retries: 8
       description: 本地近5年CVE与playbooks语料检索。已知编号用fts；产品/现象用query。root必须传语料仓绝对路径。
       external_mcp_enable: true
-# zvec-grep 配置（sidecar 已由外部脚本管理，此处仅控制 CS 端行为）
+# zvec-grep 配置（sidecar 由 ./run.sh 默认安装并启动，此处控制 CS 是否登记 MCP）
 zvec_grep:
-  enabled: false        # 设 true 自动登记上面 servers 条目（若用户未手动改过 url）
+  enabled: true         # 默认开启：自动登记上面 servers 条目（不覆盖用户已改过的 url）
   auto_register: true   # 自动合并到 external_mcp.servers（不覆盖用户已有同名的）
   listen: 127.0.0.1:7999
   source_dir: zvec-grep # 相对于配置文件目录
