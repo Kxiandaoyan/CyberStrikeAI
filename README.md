@@ -150,6 +150,18 @@ tar xzf assets/cve-corpus.tar.gz -C data/corpus
 解压后即可使用 CVE 检索页与 `zvec_grep_search`；首次语义索引由 `run.sh` 在后台构建
 （CPU 本地嵌入模型，19 万条约需一段时间，期间 fts 检索可用），之后增量自动维护。
 
+### POC 存量（部署时自动下载，不从仓库分发）
+
+`./run.sh` 首次部署会自动下载并导入两个公开存量（幂等，已存在则跳过；`SKIP_POC_STOCK=1` 可跳过）：
+
+- **公开 PoC 索引层** `data/corpus/pocindex/`：[PocOrExp_in_Github](https://github.com/ycdxsb/PocOrExp_in_Github)
+  快照（~5MB）拆分为约 1.2 万个「CVE → 公开 PoC 仓库」索引文件；更新方式 `git pull` 源仓库后重跑
+  `tools/import_pocindex.py`（重跑即刷新）。
+- **实战层 Wiki 存量** `data/corpus/poc/`：[Vulnerability-Wiki-PoC](https://github.com/SourByte05/Vulnerability-Wiki-PoC)
+  快照（~305MB 一次性）导入约 870 篇复现文章（源仓库无 license，**仅限本机使用，请勿再分发**）。
+
+存量不进本仓库：一是源仓库许可所限，二是它们是上游衍生数据，部署机一条 curl 即可获取。
+
 ## 与上游同步
 
 上游更新可对照 [Ed1s0nZ/CyberStrikeAI](https://github.com/Ed1s0nZ/CyberStrikeAI) 手动合并；

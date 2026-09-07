@@ -460,6 +460,59 @@ setup_cve_corpus() {
     info "CVE corpus: run 'python tools/convert_cve.py <cvelistV5-path> data' to rebuild"
 }
 
+# ── POC stock (public PoC index + wiki POC articles, one-time download) ─────
+# 存量不从仓库分发（SourByte Wiki 无 license 不可再分发；PocOrExp 为上游衍生数据），
+# 部署时直接从源仓库下载快照导入。幂等：已有数据则跳过。SKIP_POC_STOCK=1 可整体跳过。
+setup_poc_stock() {
+    if [ "${SKIP_POC_STOCK:-0}" = "1" ]; then
+        info "POC stock: SKIP_POC_STOCK=1, skipping"
+        return 0
+    fi
+    local TMPD
+    # ① pocindex 层：CVE → 公开 PoC 仓库索引（MIT，~5MB 快照）
+    if [ -z "$(ls "$ROOT_DIR/data/corpus/pocindex" 2>/dev/null | head -1)" ]; then
+        info "POC stock: fetching PocOrExp index snapshot (~5MB)…"
+        TMPD=$(mktemp -d)
+        if curl -sL --max-time 300 -o "$TMPD/src.tar.gz" \
+             "https://codeload.github.com/ycdxsb/PocOrExp_in_Github/tar.gz/refs/heads/main" \
+           && tar xzf "$TMPD/src.tar.gz" -C "$TMPD" 2>/dev/null; then
+            if python3 tools/import_pocindex.py "$TMPD/PocOrExp_in_Github-main" \
+                 "$ROOT_DIR/data/corpus/pocindex" \
+                 --source-name "github.com/ycdxsb/PocOrExp_in_Github" >/dev/null; then
+                success "POC stock: pocindex ready ($(ls "$ROOT_DIR/data/corpus/pocindex" | wc -l) CVEs)"
+            else
+                warning "POC stock: pocindex import failed — 可稍后手动运行 tools/import_pocindex.py"
+            fi
+        else
+            warning "POC stock: pocindex download failed — CS 照常启动，可稍后手动导入"
+        fi
+        rm -rf "$TMPD"
+    else
+        success "POC stock: pocindex already present"
+    fi
+    # ② 实战层存量：Wiki POC 复现文章（快照 ~305MB 一次性；源仓无 license，仅本机使用）
+    if [ -z "$(find "$ROOT_DIR/data/corpus/poc" -name '*.md' 2>/dev/null | head -1)" ]; then
+        info "POC stock: fetching Vulnerability-Wiki-PoC articles (~305MB one-time)…"
+        TMPD=$(mktemp -d)
+        if curl -sL --max-time 900 -o "$TMPD/src.tar.gz" \
+             "https://codeload.github.com/SourByte05/Vulnerability-Wiki-PoC/tar.gz/refs/heads/main" \
+           && tar xzf "$TMPD/src.tar.gz" -C "$TMPD" 2>/dev/null; then
+            if python3 tools/import_poc_repo.py "$TMPD/Vulnerability-Wiki-PoC-main" \
+                 "$ROOT_DIR/data/corpus/poc" \
+                 --source-name "github.com/SourByte05/Vulnerability-Wiki-PoC" >/dev/null; then
+                success "POC stock: wiki POCs ready ($(ls "$ROOT_DIR/data/corpus/poc" | wc -l) articles)"
+            else
+                warning "POC stock: wiki import failed — 可稍后手动运行 tools/import_poc_repo.py"
+            fi
+        else
+            warning "POC stock: wiki download failed — CS 照常启动，可稍后手动导入"
+        fi
+        rm -rf "$TMPD"
+    else
+        success "POC stock: combat POC layer already present"
+    fi
+}
+
 # ── zvec-grep playbooks seed (3 starter playbooks per spec §9) ──────────────
 setup_zvec_playbooks() {
     local PB_DIR="$ROOT_DIR/data/corpus/playbooks"
@@ -645,6 +698,11 @@ main() {
 
     # CVE corpus initial data (pre-built 36MB asset; cvesync handles daily deltas)
     setup_cve_corpus
+    echo ""
+
+    # POC stock: public PoC index (~5MB) + wiki POC articles (~305MB one-time),
+    # downloaded straight from the source repos (idempotent; SKIP_POC_STOCK=1 to opt out)
+    setup_poc_stock
     echo ""
 
     # zvec-grep runtime: seed playbooks, start server (agent toolset), first index

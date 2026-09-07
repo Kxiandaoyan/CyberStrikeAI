@@ -134,6 +134,21 @@ mkdir -p data/corpus && tar xzf assets/cve-corpus.tar.gz -C data/corpus
 The first semantic index build runs in the background after boot (local CPU embedding;
 fts works meanwhile); afterwards indexing is maintained incrementally.
 
+### POC stock (auto-downloaded at deploy, never shipped in this repo)
+
+On first deploy `./run.sh` downloads and imports two public stocks (idempotent;
+`SKIP_POC_STOCK=1` opts out):
+
+- **Public PoC index** `data/corpus/pocindex/` — a [PocOrExp_in_Github](https://github.com/ycdxsb/PocOrExp_in_Github)
+  snapshot (~5MB) split into ~12k per-CVE「CVE → public PoC repo」index files; refresh by
+  `git pull`-ing the source and re-running `tools/import_pocindex.py`.
+- **Wiki combat stock** `data/corpus/poc/` — a [Vulnerability-Wiki-PoC](https://github.com/SourByte05/Vulnerability-Wiki-PoC)
+  snapshot (~305MB, one-time) importing ~870 reproduction articles (the source repo
+  carries no license — **local use only, do not redistribute**).
+
+The stock is intentionally not committed: source-license constraints on one hand, and
+derived data that any deploy box can fetch with a single curl on the other.
+
 ## Upstream
 
 See [Ed1s0nZ/CyberStrikeAI](https://github.com/Ed1s0nZ/CyberStrikeAI) for the original
