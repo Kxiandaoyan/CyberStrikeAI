@@ -300,6 +300,13 @@ sync_code() {
   rsync_excludes+=( "--exclude=zvec-grep/node_modules/" )
   rsync_excludes+=( "--exclude=zvec-grep/dist/" )
 
+  # 前端/插件本地构建产物（被 .gitignore，不在发布包里；rsync --delete
+  # 不排除就会在升级时清掉部署机上已有的构建结果）
+  rsync_excludes+=( "--exclude=web/static/vendor/" )
+  rsync_excludes+=( "--exclude=plugins/*/dist/" )
+  rsync_excludes+=( "--exclude=plugins/*/target/" )
+  rsync_excludes+=( "--exclude=plugins/*/node_modules/" )
+
   # CVE corpus: pre-built tar.gz asset + extracted data preserved
   rsync_excludes+=( "--exclude=assets/" )
   rsync_excludes+=( "--exclude=data/" )

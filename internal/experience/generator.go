@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"cyberstrike-ai/internal/config"
@@ -323,7 +324,14 @@ func SanitizePocKey(s string) string {
 // can see exactly what landed, and one-shot dedup still applies. If
 // auto-write fails (or poc_auto_apply=false) the row stays a normal draft
 // for human approval.
+// pocCollectMu serializes POC collection: both closeout hooks run as
+// goroutines, and the exists-check → insert sequence must not interleave or
+// the same vulnerability would produce duplicate drafts / double sections.
+var pocCollectMu sync.Mutex
+
 func (g *Generator) collectPocDrafts(projectIDs map[string]bool) {
+	pocCollectMu.Lock()
+	defer pocCollectMu.Unlock()
 	auto := g.cfg.Experience.PocAutoApplyEffective() && g.autoApplier != nil
 	for pid := range projectIDs {
 		vulns, err := g.db.ListVulnerabilities(100, 0,
@@ -420,7 +428,13 @@ func buildPocDraftContent(v *database.Vulnerability, cve, key string, manual boo
 		fmt.Fprintf(&b, "\n## 复现步骤\n\n%s\n", redact(v.ReproSteps))
 	}
 	if v.Evidence != "" {
-		fmt.Fprintf(&b, "\n## 证据\n\n%s\n", redact(v.Evidence))
+		// 证据段常是整段响应转储：截断防单个 poc 文件无限膨胀
+		// （复现步骤保持逐字全文 —— 那是复用的操作价值）。
+		evidence := redact(v.Evidence)
+		if r := []rune(evidence); len(r) > 8000 {
+			evidence = string(r[:8000]) + "\n\n…（证据超长已截断，全文见漏洞记录）"
+		}
+		fmt.Fprintf(&b, "\n## 证据\n\n%s\n", evidence)
 	}
 	if v.Impact != "" {
 		fmt.Fprintf(&b, "\n## 影响\n\n%s\n", redact(v.Impact))

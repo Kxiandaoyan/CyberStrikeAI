@@ -428,8 +428,8 @@ persistence_c2:
   payload_url: ""          # 人填：目标机能拉到的下载地址（设置页保存）
   drop_path: ""            # 人填：目标上的落盘路径（可空=按 OS 默认）
   wait_seconds: 180        # 验上线等待秒数
-  mcp_tools: handoff       # handoff=只有 list_agents；不要 builder
-  always_poll: true
+  mcp_tools: handoff       # 预留（将来内嵌 sidecar 的工具集），当前不生效
+  always_poll: true        # 预留（将来内嵌 sidecar 的轮询开关），当前不生效
 # 内置 C2：本机仅做对话/知识库时可设为 false，不启动监听器、不注册 C2 MCP 工具；省略本段时默认启用
 c2:
   enabled: true
