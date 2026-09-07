@@ -42,7 +42,7 @@ type Config struct {
 	ZvecGrep    ZvecGrepConfig        `yaml:"zvec_grep,omitempty" json:"zvec_grep,omitempty"`   // zvec-grep 本地 CVE 检索
 	CVECorpus   CVECorpusConfig       `yaml:"cve_corpus,omitempty" json:"cve_corpus,omitempty"` // CVE 语料同步
 	Experience  ExperienceConfig      `yaml:"experience,omitempty" json:"experience,omitempty"` // 经验总结
-	GitHubC2    GitHubC2EmbedConfig   `yaml:"github_c2,omitempty" json:"github_c2,omitempty"`  // GitHub-C2 交接
+	GitHubC2    GitHubC2EmbedConfig   `yaml:"github_c2,omitempty" json:"github_c2,omitempty"`   // GitHub-C2 交接
 	Robots      RobotsConfig          `yaml:"robots,omitempty" json:"robots,omitempty"`         // 企业微信/钉钉/飞书等机器人配置
 	RolesDir    string                `yaml:"roles_dir,omitempty" json:"roles_dir,omitempty"`   // 角色配置文件目录（新方式）
 	Roles       map[string]RoleConfig `yaml:"roles,omitempty" json:"roles,omitempty"`           // 向后兼容：支持在主配置文件中定义角色
@@ -2035,12 +2035,12 @@ type C2Config struct {
 
 // ZvecGrepConfig 控制本地 CVE 检索的 zvec-grep 集成。
 type ZvecGrepConfig struct {
-	Enabled       bool   `yaml:"enabled,omitempty" json:"enabled,omitempty"`
-	AutoRegister  bool   `yaml:"auto_register,omitempty" json:"auto_register,omitempty"`
-	Listen        string `yaml:"listen,omitempty" json:"listen,omitempty"`
-	SourceDir     string `yaml:"source_dir,omitempty" json:"source_dir,omitempty"`
-	CorpusDir     string `yaml:"corpus_dir,omitempty" json:"corpus_dir,omitempty"`
-	HomeDir       string `yaml:"home_dir,omitempty" json:"home_dir,omitempty"`
+	Enabled      bool   `yaml:"enabled,omitempty" json:"enabled,omitempty"`
+	AutoRegister bool   `yaml:"auto_register,omitempty" json:"auto_register,omitempty"`
+	Listen       string `yaml:"listen,omitempty" json:"listen,omitempty"`
+	SourceDir    string `yaml:"source_dir,omitempty" json:"source_dir,omitempty"`
+	CorpusDir    string `yaml:"corpus_dir,omitempty" json:"corpus_dir,omitempty"`
+	HomeDir      string `yaml:"home_dir,omitempty" json:"home_dir,omitempty"`
 }
 
 // GitHubC2EmbedConfig 控制 CS 与 GitHub-C2 的交接集成。
@@ -2052,19 +2052,19 @@ type GitHubC2EmbedConfig struct {
 	Listen      string `yaml:"listen,omitempty" json:"listen,omitempty"`
 	WebUser     string `yaml:"web_user,omitempty" json:"web_user,omitempty"`
 	WebPass     string `yaml:"web_pass,omitempty" json:"web_pass,omitempty"`
-	PayloadURL  string `yaml:"payload_url,omitempty" json:"payload_url,omitempty"`  // 人填，目标可达的下载地址
-	DropPath    string `yaml:"drop_path,omitempty" json:"drop_path,omitempty"`      // 人填，目标上的落盘路径
+	PayloadURL  string `yaml:"payload_url,omitempty" json:"payload_url,omitempty"`   // 人填，目标可达的下载地址
+	DropPath    string `yaml:"drop_path,omitempty" json:"drop_path,omitempty"`       // 人填，目标上的落盘路径
 	WaitSeconds int    `yaml:"wait_seconds,omitempty" json:"wait_seconds,omitempty"` // 验上线等待秒数
-	MCPTools    string `yaml:"mcp_tools,omitempty" json:"mcp_tools,omitempty"`      // 默认 handoff
+	MCPTools    string `yaml:"mcp_tools,omitempty" json:"mcp_tools,omitempty"`       // 默认 handoff
 	AlwaysPoll  bool   `yaml:"always_poll,omitempty" json:"always_poll,omitempty"`
 }
 
 // CVECorpusConfig 控制 CVE 语料的每日同步。
 type CVECorpusConfig struct {
 	Enabled       bool   `yaml:"enabled,omitempty" json:"enabled,omitempty"`
-	Mode          string `yaml:"mode,omitempty" json:"mode,omitempty"`                    // git | daily_zip
-	Remote        string `yaml:"remote,omitempty" json:"remote,omitempty"`                // git URL
-	Years         int    `yaml:"years,omitempty" json:"years,omitempty"`                   // 保留年数
+	Mode          string `yaml:"mode,omitempty" json:"mode,omitempty"`     // git | daily_zip
+	Remote        string `yaml:"remote,omitempty" json:"remote,omitempty"` // git URL
+	Years         int    `yaml:"years,omitempty" json:"years,omitempty"`   // 保留年数
 	SyncHourLocal int    `yaml:"sync_hour_local,omitempty" json:"sync_hour_local,omitempty"`
 	SkipRejected  bool   `yaml:"skip_rejected,omitempty" json:"skip_rejected,omitempty"`
 	SkipReserved  bool   `yaml:"skip_reserved,omitempty" json:"skip_reserved,omitempty"`
@@ -2074,14 +2074,26 @@ type CVECorpusConfig struct {
 
 // ExperienceConfig 控制经验草稿的自动生成。
 type ExperienceConfig struct {
-	Enabled          bool   `yaml:"enabled,omitempty" json:"enabled,omitempty"`
-	AutoDraft        bool   `yaml:"auto_draft,omitempty" json:"auto_draft,omitempty"`
-	MinFacts         int    `yaml:"min_facts,omitempty" json:"min_facts,omitempty"`
-	ContentMaxRunes  int    `yaml:"content_max_runes,omitempty" json:"content_max_runes,omitempty"`
-	// AutoApply 永久锁死 false：批准落盘只能由人点批准（POST /drafts/:id/approve）。
+	Enabled         bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
+	AutoDraft       bool `yaml:"auto_draft,omitempty" json:"auto_draft,omitempty"`
+	MinFacts        int  `yaml:"min_facts,omitempty" json:"min_facts,omitempty"`
+	ContentMaxRunes int  `yaml:"content_max_runes,omitempty" json:"content_max_runes,omitempty"`
+	// AutoApply 永久锁死 false：方法论入库（知识库/Skill）只能由人点批准。
 	AutoApply bool `yaml:"auto_apply,omitempty" json:"auto_apply,omitempty"`
+	// PocAutoApply 控制实战 POC 是否免审批直接写入本地实战库
+	// （data/corpus/poc/，私有、同步不覆盖）。POC 与方法论不同：内容来自本机
+	// 漏洞记录原文、只进本机私有层，故默认自动；nil = true，显式 false 走人工队列。
+	PocAutoApply *bool `yaml:"poc_auto_apply,omitempty" json:"poc_auto_apply,omitempty"`
 	// LLM 独立配置（不走主对话模型，可用便宜模型）
 	LLM ExperienceLLMConfig `yaml:"llm,omitempty" json:"llm,omitempty"`
+}
+
+// PocAutoApplyEffective 默认开启（未配置视为 true）。
+func (e ExperienceConfig) PocAutoApplyEffective() bool {
+	if e.PocAutoApply == nil {
+		return true
+	}
+	return *e.PocAutoApply
 }
 
 // ExperienceLLMConfig 经验草稿 LLM 独立 key/base_url/model。

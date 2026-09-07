@@ -204,12 +204,12 @@ func New(cfg *config.Config, log *logger.Logger, configPath string) (*App, error
 		}
 		if existing, ok := cfg.ExternalMCP.Servers["zvec-grep"]; !ok || existing.URL == "" {
 			cfg.ExternalMCP.Servers["zvec-grep"] = config.ExternalMCPServerConfig{
-				Type:             "http",
-				URL:              zvecURL,
-				Timeout:          90,
-				KeepAlive:        30,
-				MaxRetries:       8,
-				Description:      "本地近5年CVE与playbooks语料检索。已知编号用fts；产品/现象用query。root必须传语料仓绝对路径。",
+				Type:              "http",
+				URL:               zvecURL,
+				Timeout:           90,
+				KeepAlive:         30,
+				MaxRetries:        8,
+				Description:       "本地近5年CVE与playbooks语料检索。已知编号用fts；产品/现象用query。root必须传语料仓绝对路径。",
 				ExternalMCPEnable: true,
 			}
 			log.Logger.Info("zvec-grep: auto-registered as external MCP", zap.String("url", zvecURL))
@@ -436,7 +436,8 @@ func New(cfg *config.Config, log *logger.Logger, configPath string) (*App, error
 	agentHandler.SetAgentsMarkdownDir(agentsDir)
 	// 经验总结生成器（说明书 §7）：可交付完成 / 队列完成 → LLM 草稿 → 人审。
 	// Generator 内部自检 enabled/auto_draft，未启用时挂点为 no-op。
-	agentHandler.SetExperienceGenerator(experience.NewGenerator(db, cfg, log.Logger.Sugar()))
+	expGen := experience.NewGenerator(db, cfg, log.Logger.Sugar())
+	agentHandler.SetExperienceGenerator(expGen)
 	// 如果知识库已启用，设置知识库管理器到AgentHandler以便记录检索日志
 	if knowledgeManager != nil {
 		agentHandler.SetKnowledgeManager(knowledgeManager)
@@ -568,10 +569,13 @@ func New(cfg *config.Config, log *logger.Logger, configPath string) (*App, error
 
 	// 经验草稿批准后的落盘回调（说明书 §7）：skill:<name> 追加/新建 SKILL.md，
 	// knowledge 写入知识库「经验总结」分类，poc:CVE-YYYY-N 写入本地 POC 库
-	// （data/corpus/poc/，同步安全、仓库私有）。仅由人点批准触发，auto_apply 恒 false。
+	// （data/corpus/poc/，同步安全、仓库私有）。方法论入库仅由人点批准
+	// （auto_apply 恒 false）；POC 默认免审批自动落盘（poc_auto_apply，可关），
+	// 自动与人工走同一段写文件代码。
 	app.experienceApplier = func(d *experience.Draft, appliedTo string) (string, error) {
 		return applyExperienceDraft(skillsDir, app.corpusDirAbs, app.knowledgeManager, d, appliedTo)
 	}
+	expGen.SetAutoApplier(app.experienceApplier)
 
 	// 设置漏洞工具注册器（内置工具，必须设置）
 	vulnerabilityRegistrar := func() error {

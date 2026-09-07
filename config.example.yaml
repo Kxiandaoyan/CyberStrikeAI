@@ -401,9 +401,11 @@ cve_corpus:
 # 经验总结（收尾自动生成草稿，人审后入库）
 experience:
   enabled: false
-  auto_draft: false      # 设 true 在项目/队列完成时自动生成经验草稿；confirmed 且带 CVE 编号的漏洞
-                         # 会额外生成 POC 沉淀草稿（批准时 applied_to 填 poc:CVE-YYYY-NNNN 写入
-                         # data/corpus/poc/ 本地实战库，永不随公开仓库分发、永不被每日同步覆盖）
+  auto_draft: false        # 设 true 在项目/队列完成时自动生成经验草稿
+  poc_auto_apply: true     # 实战 POC 免审批：confirmed 且带 CVE 编号的漏洞在收尾时
+                           # 自动写入本地实战库 data/corpus/poc/（IPv4 脱敏、仅存本机、
+                           # 同步不覆盖、不出公开仓库）。设 false 则 POC 也进人工批准队列。
+                           # 方法论经验（auto_apply）恒为人工批准，不受本开关影响。
   auto_apply: false      # 恒 false：入库只能由人在草稿页点批准（Load 强制覆写）
   min_facts: 2           # 触发草稿的最少 fact 数
   content_max_runes: 4000

@@ -28,12 +28,13 @@ This fork turns "search" into "lookup" and "throw away" into "accumulate":
 |---|---|---|
 | Component identified | run the entire external sequence | **first hit is the local corpus** (190k+ official records, sub-second, offline, zero egress) |
 | A CVE you've exploited before | search the web from scratch again | **check the local POC library first** → reuse the working recipe, skip most external steps |
-| Knowledge found | used once, discarded | exploit succeeds → draft → human review → written into the local library, **grows forever** |
+| Knowledge found | used once, discarded | exploit succeeds → **auto-written into the local library**, grows forever |
 | Freshness | whatever the sweep returns | official layer synced daily from CNA (1-2 days ahead of NVD) |
 
-The loop: engagement N exploits a CVE → confirmed vulnerability record → closeout auto-drafts
-a POC → human approves → written to `data/corpus/poc/` → **engagement N+1 hits it locally and
-never searches the web for it again**. The system gets faster and smarter with every engagement.
+The loop: engagement N exploits a CVE → confirmed vulnerability record → closeout **automatically**
+files the POC (IPv4-redacted; `poc_auto_apply` on by default, can be switched back to manual review)
+into `data/corpus/poc/` → **engagement N+1 hits it locally and never searches the web for it again**.
+The system gets faster and smarter with every engagement.
 
 ## What's added on top of upstream
 
@@ -47,13 +48,15 @@ never searches the web for it again**. The system gets faster and smarter with e
    no git subprocess); an honest watermark (state advances only after every change lands),
    count gates (≥80% total, per-year floor), 3am daily + 36h catch-up, manual
    `POST /api/cve-corpus/sync?full=1`.
-3. **Combat POC accumulation (the "faster over time" core)** — after a confirmed, CVE-tagged
-   vulnerability, closeout mechanically assembles a POC draft from the vulnerability record
-   (reproduction steps verbatim, no LLM rewrite, IPv4-redacted; one draft per vulnerability
-   ever). Human approval (`applied_to = poc:CVE-YYYY-NNNN`) writes/append a dated
-   「实战补记」section into `data/corpus/poc/CVE-YYYY-NNNN.md`. The daily sync never touches
-   the POC layer; `data/` is git-ignored so combat records never reach the public repo;
-   there is no automatic write path (`auto_apply` hard-locked false). Next engagement:
+3. **Combat POC accumulation (the "faster over time" core, auto by default)** — after a
+   confirmed, CVE-tagged vulnerability, closeout mechanically assembles the POC from the
+   vulnerability record (reproduction steps verbatim, no LLM rewrite, IPv4-redacted; one
+   entry per vulnerability ever) and **writes it straight into
+   `data/corpus/poc/CVE-YYYY-NNNN.md`** — repeated engagements append dated sections.
+   `poc_auto_apply` is on by default; set it to false to route POCs through the human
+   approval queue instead. Every auto-write leaves a visible trace on the drafts page
+   (reviewer=auto, full content). The daily sync never touches the POC layer; `data/` is
+   git-ignored so combat records never reach the public repo. Next engagement:
    `fts + globs:["poc/**"]` pulls the recipe directly.
 4. **GitHub-C2 handoff (long-term persistence)** — the built-in Beacon has no target-side
    persistence; this fork adds a handoff chain to an independently deployed GitHub-C2
@@ -65,13 +68,13 @@ never searches the web for it again**. The system gets faster and smarter with e
    `handoff-github-c2` skill.
 5. **Experience distillation (closeout → human review → library)** — project/batch completion
    auto-generates redacted LLM drafts from blackboard facts (independent cheap model, IPv4
-   redaction, min-facts gate, 24h dedup); humans approve via `/api/experience/drafts` into
-   the knowledge base or as patches appended to a skill's `SKILL.md`. **Complementary to POC
-   drafts, same queue, different categories**: methodology drafts distill cross-project
-   method (LLM, min-facts gate); POC drafts record per-vulnerability exploitation steps
-   (mechanical, verbatim). A successful engagement typically produces both. `auto_apply` is
-   hard-locked false; the model has no skill-writing tool in-session. A finished batch queue
-   yields exactly one aggregated draft.
+   redaction, min-facts gate, 24h dedup); **humans approve them on the「经验草稿」(drafts)
+   page** — into the knowledge base or as patches appended to a skill's `SKILL.md`.
+   **Clean division of labor with POC accumulation**: methodology drafts (LLM + min-facts +
+   human approval, `auto_apply` hard-locked false) distill cross-project method; POCs
+   (mechanical, auto-filed) record per-vulnerability exploitation into the private local
+   library. A successful engagement produces both. The model has no skill-writing tool
+   in-session; a finished batch queue yields exactly one aggregated draft.
 6. **Reliability fixes** — settings now persist to `config.yaml` immediately, tools survive
    config re-apply, corpus paths resolve against the config file directory, prompts/skills
    aligned with local-first and handoff discipline.

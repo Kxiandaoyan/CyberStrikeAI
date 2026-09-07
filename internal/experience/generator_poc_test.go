@@ -33,14 +33,20 @@ func TestBuildPocDraftContentRedacts(t *testing.T) {
 		Preconditions: "auth bypass needed on 192.168.1.10",
 		ReproSteps:    "1. send payload to 10.0.0.5:9001\n2. get shell",
 	}
-	content := buildPocDraftContent(v, "CVE-2024-99999")
-	if strings.Contains(content, "10.1.2.3") || strings.Contains(content, "192.168.1.10") || strings.Contains(content, "10.0.0.5") {
-		t.Fatalf("IPv4 not redacted:\n%s", content)
+	content := buildPocDraftContent(v, "CVE-2024-99999", true)
+	autoContent := buildPocDraftContent(v, "CVE-2024-99999", false)
+	for name, c := range map[string]string{"manual": content, "auto": autoContent} {
+		if strings.Contains(c, "10.1.2.3") || strings.Contains(c, "192.168.1.10") || strings.Contains(c, "10.0.0.5") {
+			t.Fatalf("IPv4 not redacted (%s):\n%s", name, c)
+		}
+		if !strings.Contains(c, "CVE-2024-99999") || !strings.Contains(c, "## 复现步骤") {
+			t.Fatalf("template missing fields (%s):\n%s", name, c)
+		}
+		if !strings.Contains(c, "x.x.x.x") {
+			t.Fatalf("redaction placeholder missing (%s):\n%s", name, c)
+		}
 	}
-	if !strings.Contains(content, "CVE-2024-99999") || !strings.Contains(content, "## 复现步骤") {
-		t.Fatalf("template missing fields:\n%s", content)
-	}
-	if !strings.Contains(content, "x.x.x.x") {
-		t.Fatalf("redaction placeholder missing:\n%s", content)
+	if !strings.Contains(content, "批准时") || !strings.Contains(autoContent, "已自动写入") {
+		t.Fatal("mode-specific guidance missing")
 	}
 }

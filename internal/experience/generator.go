@@ -27,12 +27,21 @@ type Generator struct {
 	db     *database.DB
 	cfg    *config.Config
 	logger *zap.SugaredLogger
+	// autoApplier（可选）POC 免审批直接落盘的写入器，由 app.go 注入 —— 与人工
+	// 批准走同一段写文件代码（experience_apply 的 poc 分支）。
+	autoApplier func(d *Draft, appliedTo string) (string, error)
 }
 
 // NewGenerator builds a Generator. Callers may hold it even when disabled —
 // every entry point re-checks Enabled/AutoDraft and is nil-safe.
 func NewGenerator(db *database.DB, cfg *config.Config, logger *zap.SugaredLogger) *Generator {
 	return &Generator{db: db, cfg: cfg, logger: logger}
+}
+
+// SetAutoApplier wires the POC auto-write backend (same file-writing code as
+// the human approve path). Methodology drafts never call it.
+func (g *Generator) SetAutoApplier(f func(d *Draft, appliedTo string) (string, error)) {
+	g.autoApplier = f
 }
 
 // MaybeDraftConversation asynchronously drafts for a finished conversation.
@@ -282,11 +291,14 @@ func redact(s string) string {
 // cveIDPattern extracts a CVE id from free text (vuln title/description/steps).
 var cveIDPattern = regexp.MustCompile(`\bCVE-\d{4}-\d{4,}\b`)
 
-// collectPocDrafts emits one POC draft per confirmed vulnerability that maps
-// to a CVE id. Drafts land in the same human-review queue as methodology
-// drafts; approval with applied_to="poc:CVE-…" writes them into the local
-// corpus POC library (data/corpus/poc/) — never automatically.
+// collectPocDrafts emits one POC entry per confirmed vulnerability that maps
+// to a CVE id. Default mode (poc_auto_apply, on unless disabled): the entry is
+// written straight into the local POC library — the draft row is still created
+// and immediately marked approved (reviewer="auto") so the operator can see
+// exactly what landed, and one-shot dedup still applies. If auto-write fails
+// (or poc_auto_apply=false) the row stays a normal draft for human approval.
 func (g *Generator) collectPocDrafts(projectIDs map[string]bool) {
+	auto := g.cfg.Experience.PocAutoApplyEffective() && g.autoApplier != nil
 	for pid := range projectIDs {
 		vulns, err := g.db.ListVulnerabilities(100, 0,
 			database.VulnerabilityListFilter{ProjectID: pid, Status: "confirmed"})
@@ -303,7 +315,7 @@ func (g *Generator) collectPocDrafts(projectIDs map[string]bool) {
 			}
 			exists, err := DraftExistsBySource(g.db.DB, "poc", v.ID)
 			if err != nil || exists {
-				continue // one draft per vulnerability ever (rejected = stay rejected)
+				continue // one entry per vulnerability ever (rejected = stay rejected)
 			}
 			fk, _ := json.Marshal([]string{cve})
 			d := &Draft{
@@ -311,15 +323,27 @@ func (g *Generator) collectPocDrafts(projectIDs map[string]bool) {
 				Source:     v.ID,
 				SourceType: "poc",
 				Title:      "POC " + cve + " — " + firstRunes(v.Title, 60),
-				Content:    buildPocDraftContent(v, cve),
+				Content:    buildPocDraftContent(v, cve, !auto),
 				Category:   "poc",
 				FactKeys:   string(fk),
 			}
-			if _, err := CreateDraft(g.db.DB, d); err != nil {
+			id, err := CreateDraft(g.db.DB, d)
+			if err != nil {
 				g.logger.Warnw("poc draft create failed", "vuln", v.ID, "error", err)
 				continue
 			}
-			g.logger.Infow("poc draft created", "cve", cve, "vuln", v.ID)
+			if auto {
+				if dest, aerr := g.autoApplier(d, "poc:"+cve); aerr == nil {
+					if uerr := ApproveDraft(g.db.DB, id, "auto", dest); uerr == nil {
+						g.logger.Infow("poc auto-applied", "cve", cve, "vuln", v.ID, "dest", dest)
+						continue
+					}
+				} else {
+					g.logger.Warnw("poc auto-apply failed — left for human approval",
+						"cve", cve, "vuln", v.ID, "error", aerr)
+				}
+			}
+			g.logger.Infow("poc draft created (pending review)", "cve", cve, "vuln", v.ID)
 		}
 	}
 }
@@ -336,11 +360,17 @@ func firstCVEID(fields ...string) string {
 
 // buildPocDraftContent assembles the POC record from the vulnerability
 // fields verbatim (IPv4-redacted). No LLM rewrite: commands and payloads
-// must survive byte-for-byte; the human reviewer sees exactly this.
-func buildPocDraftContent(v *database.Vulnerability, cve string) string {
+// must survive byte-for-byte. manual=true (human-review mode) prefixes the
+// approve guidance; auto mode notes it has already been written.
+func buildPocDraftContent(v *database.Vulnerability, cve string, manual bool) string {
 	var b strings.Builder
-	b.WriteString("> POC 沉淀草稿：批准时 applied_to 填 `poc:" + cve + "`，将写入本地实战库 data/corpus/poc/。\n")
-	b.WriteString("> 内容机械摘自漏洞记录并已做 IPv4 脱敏；目标域名/路径/凭据是否保留请人工过目后再批准。\n\n")
+	if manual {
+		b.WriteString("> POC 沉淀草稿：批准时 applied_to 填 `poc:" + cve + "`，将写入本地实战库 data/corpus/poc/。\n")
+		b.WriteString("> 内容机械摘自漏洞记录并已做 IPv4 脱敏；目标域名/路径/凭据是否保留请人工过目后再批准。\n\n")
+	} else {
+		b.WriteString("> 已自动写入本地实战库 data/corpus/poc/" + cve + ".md（poc_auto_apply 默认开启）。\n")
+		b.WriteString("> 内容机械摘自漏洞记录并已做 IPv4 脱敏。此记录仅存本机，不出公开仓库、不被每日同步覆盖。\n\n")
+	}
 	fmt.Fprintf(&b, "- CVE: %s\n", cve)
 	fmt.Fprintf(&b, "- 标题: %s\n", v.Title)
 	fmt.Fprintf(&b, "- 类型 / 严重度: %s / %s\n", v.Type, v.Severity)
