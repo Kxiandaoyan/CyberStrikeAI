@@ -95,9 +95,12 @@ coverage also backfills history beyond the 5-year corpus window.
    (mechanical, auto-filed) record per-vulnerability exploitation into the private local
    library. A successful engagement produces both. The model has no skill-writing tool
    in-session; a finished batch queue yields exactly one aggregated draft.
-6. **Reliability fixes** — settings now persist to `config.yaml` immediately, tools survive
-   config re-apply, corpus paths resolve against the config file directory, prompts/skills
-   aligned with local-first and handoff discipline.
+6. **Reliability fixes & scan-resistant login** — unauthenticated visitors get a bare
+   minimal login page (no product name, icon, background or static references); the whole
+   JS/CSS bundle and the favicon return 404 until authenticated, so Censys/Shodan-style
+   fingerprinting finds nothing identifiable. Settings now persist to `config.yaml`
+   immediately, tools survive config re-apply, corpus paths resolve against the config
+   file directory, prompts/skills aligned with local-first and handoff discipline.
 
 ## Repository layout
 

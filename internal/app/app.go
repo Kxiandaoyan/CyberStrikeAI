@@ -1551,17 +1551,45 @@ func setupRoutes(
 	// OpenAPI规范（需要认证，避免暴露API结构信息）
 	protected.GET("/openapi/spec", openAPIHandler.GetOpenAPISpec)
 
-	// API文档页面（公开访问，但需要登录后才能使用API）
+	// ── 防指纹（Censys/Shodan）：未认证响应不含任何产品特征 ──────────────────
+	// 根路径未登录返回极简登录页（无产品名/图标/背景/静态引用）；
+	// /static 整套 JS/CSS 未登录不可见；favicon 无路由（根路径 404）。
+	// 已登录（cookie auth_token 与 API 中间件同源校验）返回完整界面。
+	pageAuthed := func(c *gin.Context) bool {
+		tok, err := c.Cookie("auth_token")
+		if err != nil || strings.TrimSpace(tok) == "" {
+			return false
+		}
+		_, ok := authManager.ValidateToken(tok)
+		return ok
+	}
+
+	// API文档页面（未登录同样只见极简登录页，不暴露 API 结构信息）
 	router.GET("/api-docs", func(c *gin.Context) {
+		if !pageAuthed(c) {
+			c.HTML(http.StatusOK, "login.html", nil)
+			return
+		}
 		c.HTML(http.StatusOK, "api-docs.html", nil)
 	})
 
-	// 静态文件
-	router.Static("/static", "./web/static")
+	// 静态文件：认证后经标准 FileServer 提供（与原 router.Static 等价）
+	staticFiles := http.StripPrefix("/static/", http.FileServer(http.Dir("./web/static")))
+	router.GET("/static/*filepath", func(c *gin.Context) {
+		if !pageAuthed(c) {
+			c.String(http.StatusNotFound, "404 page not found")
+			return
+		}
+		staticFiles.ServeHTTP(c.Writer, c.Request)
+	})
 	router.LoadHTMLGlob("web/templates/*")
 
-	// 前端页面
+	// 前端页面：未登录 → 极简登录页；已登录 → 完整应用
 	router.GET("/", func(c *gin.Context) {
+		if !pageAuthed(c) {
+			c.HTML(http.StatusOK, "login.html", nil)
+			return
+		}
 		version := app.config.Version
 		if version == "" {
 			version = "v1.0.0"

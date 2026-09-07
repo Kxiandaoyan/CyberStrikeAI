@@ -473,9 +473,9 @@ setup_poc_stock() {
     if [ -z "$(ls "$ROOT_DIR/data/corpus/pocindex" 2>/dev/null | head -1)" ]; then
         info "POC stock: fetching PocOrExp index snapshot (~5MB)…"
         TMPD=$(mktemp -d)
-        if curl -sL --max-time 300 -o "$TMPD/src.tar.gz" \
-             "https://codeload.github.com/ycdxsb/PocOrExp_in_Github/tar.gz/refs/heads/main" \
-           && tar xzf "$TMPD/src.tar.gz" -C "$TMPD" 2>/dev/null; then
+        if curl -sL --max-time 300 -o "$TMPD/src.zip" \
+             "https://codeload.github.com/ycdxsb/PocOrExp_in_Github/zip/refs/heads/main" \
+           && { unzip -q "$TMPD/src.zip" -d "$TMPD" 2>/dev/null || python3 -m zipfile -e "$TMPD/src.zip" "$TMPD"; }; then
             if python3 tools/import_pocindex.py "$TMPD/PocOrExp_in_Github-main" \
                  "$ROOT_DIR/data/corpus/pocindex" \
                  --source-name "github.com/ycdxsb/PocOrExp_in_Github" >/dev/null; then
@@ -494,9 +494,9 @@ setup_poc_stock() {
     if [ -z "$(find "$ROOT_DIR/data/corpus/poc" -name '*.md' 2>/dev/null | head -1)" ]; then
         info "POC stock: fetching Vulnerability-Wiki-PoC articles (~305MB one-time)…"
         TMPD=$(mktemp -d)
-        if curl -sL --max-time 900 -o "$TMPD/src.tar.gz" \
-             "https://codeload.github.com/SourByte05/Vulnerability-Wiki-PoC/tar.gz/refs/heads/main" \
-           && tar xzf "$TMPD/src.tar.gz" -C "$TMPD" 2>/dev/null; then
+        if curl -sL --max-time 900 -o "$TMPD/src.zip" \
+             "https://codeload.github.com/SourByte05/Vulnerability-Wiki-PoC/zip/refs/heads/main" \
+           && { unzip -q "$TMPD/src.zip" -d "$TMPD" 2>/dev/null || python3 -m zipfile -e "$TMPD/src.zip" "$TMPD"; }; then
             if python3 tools/import_poc_repo.py "$TMPD/Vulnerability-Wiki-PoC-main" \
                  "$ROOT_DIR/data/corpus/poc" \
                  --source-name "github.com/SourByte05/Vulnerability-Wiki-PoC" >/dev/null; then

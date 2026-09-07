@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>登录</title>
+</head>
+<body>
+<div style="max-width:320px;margin:80px auto;font-family:sans-serif;font-size:14px;color:#333">
+  <form id="f">
+    <p><input id="u" placeholder="用户名" autocomplete="username" style="width:100%;padding:6px 8px;box-sizing:border-box"></p>
+    <p><input id="p" type="password" placeholder="密码" autocomplete="current-password" style="width:100%;padding:6px 8px;box-sizing:border-box"></p>
+    <p><button type="submit" style="width:100%;padding:6px 8px">登录</button></p>
+    <p id="m" style="color:#c00;display:none"></p>
+  </form>
+</div>
+<script>
+document.getElementById('f').addEventListener('submit', function (e) {
+  e.preventDefault();
+  var m = document.getElementById('m');
+  m.style.display = 'none';
+  fetch('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: document.getElementById('u').value, password: document.getElementById('p').value })
+  }).then(function (r) {
+    return r.json().then(function (d) { return { ok: r.ok, d: d }; });
+  }).then(function (res) {
+    if (!res.ok) {
+      m.textContent = (res.d && res.d.error) ? res.d.error : '登录失败';
+      m.style.display = '';
+      return;
+    }
+    try {
+      localStorage.setItem('cyberstrike-auth', JSON.stringify({
+        token: res.d.token,
+        expiresAt: res.d.expires_at,
+        user: res.d.user || null,
+        roles: res.d.roles || [],
+        permissions: res.d.permissions || [],
+        scope: res.d.scope || ''
+      }));
+    } catch (err) { /* 存储不可用时仅靠 cookie */ }
+    document.cookie = 'auth_token=' + res.d.token + '; path=/; SameSite=Strict';
+    location.replace('/');
+  }).catch(function () {
+    m.textContent = '网络错误';
+    m.style.display = '';
+  });
+});
+</script>
+</body>
+</html>
