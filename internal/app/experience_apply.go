@@ -1,9 +1,14 @@
 // Package app — experience draft persistence on human approval (spec §7).
 //
 // Targets:
-//   - "skill:<name>"  append an「经验补丁」section to skills/<name>/SKILL.md,
+//   - "skill:<name>"   append an「经验补丁」section to skills/<name>/SKILL.md,
 //     creating a minimal skill when it does not exist yet
-//   - "knowledge"     knowledge.CreateItem("经验总结", title, content)
+//   - "knowledge"      knowledge.CreateItem("经验总结", title, content)
+//   - "poc:CVE-YYYY-N" write/append a「实战补记」section into the local POC
+//     library at <corpusDir>/poc/CVE-YYYY-N.md — sync-safe
+//     (cvesync only ever writes cve/{year}/), private
+//     (data/ is git-ignored), zvec-indexed via the poc/**
+//     glob when the index was built with it.
 //
 // Only ever invoked from the human approve endpoint — auto_apply is locked
 // false in config.Load.
@@ -26,12 +31,50 @@ import (
 // traversal protection for the on-disk skill path.
 var skillNamePattern = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 
+// cveIDPatternForPath validates a POC target id; the id becomes a filename,
+// so anything outside CVE-YYYY-NNNN… is rejected outright.
+var cveIDPatternForPath = regexp.MustCompile(`^CVE-\d{4}-\d{4,}$`)
+
 // applyExperienceDraft persists an approved draft and returns the actual
 // destination (path or knowledge item id) recorded on the draft row.
-func applyExperienceDraft(skillsDir string, km *knowledge.Manager, d *experience.Draft, appliedTo string) (string, error) {
+func applyExperienceDraft(skillsDir, corpusDir string, km *knowledge.Manager, d *experience.Draft, appliedTo string) (string, error) {
 	target := strings.TrimSpace(appliedTo)
 	if target == "" {
 		target = "knowledge"
+	}
+
+	if strings.HasPrefix(target, "poc:") {
+		cveID := strings.ToUpper(strings.TrimSpace(strings.TrimPrefix(target, "poc:")))
+		if !cveIDPatternForPath.MatchString(cveID) {
+			return "", fmt.Errorf("invalid POC target %q — must be poc:CVE-YYYY-NNNN", appliedTo)
+		}
+		if corpusDir == "" {
+			return "", fmt.Errorf("corpus dir not configured — cannot write POC library")
+		}
+		pocDir := filepath.Join(corpusDir, "poc")
+		if err := os.MkdirAll(pocDir, 0755); err != nil {
+			return "", err
+		}
+		pocPath := filepath.Join(pocDir, cveID+".md")
+		section := fmt.Sprintf("\n\n## 实战补记（%s）\n\n%s\n", time.Now().Format("2006-01-02"), d.Content)
+
+		if data, err := os.ReadFile(pocPath); err == nil && len(data) > 0 {
+			f, err := os.OpenFile(pocPath, os.O_APPEND|os.O_WRONLY, 0644)
+			if err != nil {
+				return "", err
+			}
+			defer f.Close()
+			if _, err := f.WriteString(section); err != nil {
+				return "", err
+			}
+			return pocPath, nil
+		}
+		content := fmt.Sprintf("---\ncve: %s\nadded: %s\n---\n\n# %s 实战利用记录\n%s",
+			cveID, time.Now().Format("2006-01-02"), cveID, section)
+		if err := os.WriteFile(pocPath, []byte(content), 0644); err != nil {
+			return "", err
+		}
+		return pocPath, nil
 	}
 
 	if strings.HasPrefix(target, "skill:") {
@@ -77,5 +120,5 @@ func applyExperienceDraft(skillsDir string, km *knowledge.Manager, d *experience
 		return "knowledge:" + item.ID, nil
 	}
 
-	return "", fmt.Errorf("unsupported applied_to %q — use skill:<name> or knowledge", appliedTo)
+	return "", fmt.Errorf("unsupported applied_to %q — use poc:CVE-YYYY-NNNN, skill:<name> or knowledge", appliedTo)
 }

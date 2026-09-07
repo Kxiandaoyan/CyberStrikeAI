@@ -432,7 +432,7 @@ setup_zvec_grep() {
         warning "zvec-grep: build failed, CS will start without local CVE search"
     fi
     mkdir -p "$ROOT_DIR/data/corpus/cve" "$ROOT_DIR/data/corpus/playbooks" \
-             "$ROOT_DIR/data/corpus/raw" "$ROOT_DIR/data/zvec-home"
+             "$ROOT_DIR/data/corpus/poc" "$ROOT_DIR/data/corpus/raw" "$ROOT_DIR/data/zvec-home"
 }
 
 # ── CVE corpus setup ────────────────────────────────────────────────────────
@@ -557,6 +557,7 @@ setup_zvec_first_index() {
     fi
     if [ -d "$CORPUS_DIR/.zvec-grep" ]; then
         success "zvec-grep: workspace index already present (增量由检索时 autoUpdate 维护)"
+        note "若索引建立早于 POC 库功能，需重建一次才能语义检索实战记录：cd $CORPUS_DIR && node $ZG_CLI index . --rebuild -g 'cve/**' -g 'playbooks/**' -g 'poc/**' --embedding local/potion-code-16m-v2 --mode direct"
         return 0
     fi
     mkdir -p "$ROOT_DIR/logs"
@@ -564,7 +565,7 @@ setup_zvec_first_index() {
     (
         cd "$CORPUS_DIR" || exit 1
         ZVEC_GREP_HOME="$ROOT_DIR/data/zvec-home" ZVEC_GREP_DEVICE=cpu \
-            nohup node "$ZG_CLI" index . -g 'cve/**' -g 'playbooks/**' \
+            nohup node "$ZG_CLI" index . -g 'cve/**' -g 'playbooks/**' -g 'poc/**' \
             --embedding local/potion-code-16m-v2 --mode direct \
             >> "$ROOT_DIR/logs/zvec-index.log" 2>&1 &
     )

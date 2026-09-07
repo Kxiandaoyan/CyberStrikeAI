@@ -127,6 +127,19 @@ func RejectDraft(db *sql.DB, id int64, reviewer string) error {
 	return err
 }
 
+// DraftExistsBySource reports whether a draft with this source_type+source
+// already exists in ANY status (rejected counts: the reviewer said no, so it
+// is never recreated). Used for POC per-vulnerability dedup.
+func DraftExistsBySource(db *sql.DB, sourceType, source string) (bool, error) {
+	var n int
+	err := db.QueryRow(`SELECT COUNT(*) FROM experience_drafts
+		WHERE source_type = ? AND source = ?`, sourceType, source).Scan(&n)
+	if err != nil {
+		return false, err
+	}
+	return n > 0, nil
+}
+
 func CountByStatus(db *sql.DB) (map[string]int, error) {
 	rows, err := db.Query(`SELECT status, COUNT(*) FROM experience_drafts GROUP BY status`)
 	if err != nil {

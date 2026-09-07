@@ -99,6 +99,12 @@ func (g *Generator) draftForConversations(sourceType, source string, conversatio
 	if len(projectIDs) == 0 {
 		return fmt.Errorf("no project-bound conversation")
 	}
+
+	// POC 沉淀（独立于 min_facts 门槛）：一条 confirmed 且能对上 CVE 编号的
+	// 漏洞就值得出草稿。机械组装自漏洞记录（复现步骤/前提/证据），
+	// 不过 LLM —— 保真、零幻觉；IPv4 机械脱敏，其余目标特征靠人审把关。
+	g.collectPocDrafts(projectIDs)
+
 	for pid := range projectIDs {
 		pf, err := g.db.ListProjectFactsForIndex(pid, false)
 		if err != nil {
@@ -271,6 +277,97 @@ var ipv4Pattern = regexp.MustCompile(`\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b`)
 
 func redact(s string) string {
 	return ipv4Pattern.ReplaceAllString(s, "x.x.x.x")
+}
+
+// cveIDPattern extracts a CVE id from free text (vuln title/description/steps).
+var cveIDPattern = regexp.MustCompile(`\bCVE-\d{4}-\d{4,}\b`)
+
+// collectPocDrafts emits one POC draft per confirmed vulnerability that maps
+// to a CVE id. Drafts land in the same human-review queue as methodology
+// drafts; approval with applied_to="poc:CVE-…" writes them into the local
+// corpus POC library (data/corpus/poc/) — never automatically.
+func (g *Generator) collectPocDrafts(projectIDs map[string]bool) {
+	for pid := range projectIDs {
+		vulns, err := g.db.ListVulnerabilities(100, 0,
+			database.VulnerabilityListFilter{ProjectID: pid, Status: "confirmed"})
+		if err != nil {
+			continue
+		}
+		for _, v := range vulns {
+			if v == nil {
+				continue
+			}
+			cve := firstCVEID(v.Title, v.Description, v.ReproSteps)
+			if cve == "" {
+				continue
+			}
+			exists, err := DraftExistsBySource(g.db.DB, "poc", v.ID)
+			if err != nil || exists {
+				continue // one draft per vulnerability ever (rejected = stay rejected)
+			}
+			fk, _ := json.Marshal([]string{cve})
+			d := &Draft{
+				ProjectID:  pid,
+				Source:     v.ID,
+				SourceType: "poc",
+				Title:      "POC " + cve + " — " + firstRunes(v.Title, 60),
+				Content:    buildPocDraftContent(v, cve),
+				Category:   "poc",
+				FactKeys:   string(fk),
+			}
+			if _, err := CreateDraft(g.db.DB, d); err != nil {
+				g.logger.Warnw("poc draft create failed", "vuln", v.ID, "error", err)
+				continue
+			}
+			g.logger.Infow("poc draft created", "cve", cve, "vuln", v.ID)
+		}
+	}
+}
+
+// firstCVEID returns the first CVE id found, title first.
+func firstCVEID(fields ...string) string {
+	for _, f := range fields {
+		if m := cveIDPattern.FindString(strings.ToUpper(f)); m != "" {
+			return m
+		}
+	}
+	return ""
+}
+
+// buildPocDraftContent assembles the POC record from the vulnerability
+// fields verbatim (IPv4-redacted). No LLM rewrite: commands and payloads
+// must survive byte-for-byte; the human reviewer sees exactly this.
+func buildPocDraftContent(v *database.Vulnerability, cve string) string {
+	var b strings.Builder
+	b.WriteString("> POC 沉淀草稿：批准时 applied_to 填 `poc:" + cve + "`，将写入本地实战库 data/corpus/poc/。\n")
+	b.WriteString("> 内容机械摘自漏洞记录并已做 IPv4 脱敏；目标域名/路径/凭据是否保留请人工过目后再批准。\n\n")
+	fmt.Fprintf(&b, "- CVE: %s\n", cve)
+	fmt.Fprintf(&b, "- 标题: %s\n", v.Title)
+	fmt.Fprintf(&b, "- 类型 / 严重度: %s / %s\n", v.Type, v.Severity)
+	if v.Target != "" {
+		fmt.Fprintf(&b, "- 目标: %s\n", redact(v.Target))
+	}
+	if v.Preconditions != "" {
+		fmt.Fprintf(&b, "\n## 利用前提\n\n%s\n", redact(v.Preconditions))
+	}
+	if v.ReproSteps != "" {
+		fmt.Fprintf(&b, "\n## 复现步骤\n\n%s\n", redact(v.ReproSteps))
+	}
+	if v.Evidence != "" {
+		fmt.Fprintf(&b, "\n## 证据\n\n%s\n", redact(v.Evidence))
+	}
+	if v.Impact != "" {
+		fmt.Fprintf(&b, "\n## 影响\n\n%s\n", redact(v.Impact))
+	}
+	return b.String()
+}
+
+func firstRunes(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n])
 }
 
 func firstKey(m map[string]bool) string {

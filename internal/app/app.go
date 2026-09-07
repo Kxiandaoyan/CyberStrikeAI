@@ -567,9 +567,10 @@ func New(cfg *config.Config, log *logger.Logger, configPath string) (*App, error
 	}
 
 	// 经验草稿批准后的落盘回调（说明书 §7）：skill:<name> 追加/新建 SKILL.md，
-	// knowledge 写入知识库「经验总结」分类。仅由人点批准触发，auto_apply 恒 false。
+	// knowledge 写入知识库「经验总结」分类，poc:CVE-YYYY-N 写入本地 POC 库
+	// （data/corpus/poc/，同步安全、仓库私有）。仅由人点批准触发，auto_apply 恒 false。
 	app.experienceApplier = func(d *experience.Draft, appliedTo string) (string, error) {
-		return applyExperienceDraft(skillsDir, app.knowledgeManager, d, appliedTo)
+		return applyExperienceDraft(skillsDir, app.corpusDirAbs, app.knowledgeManager, d, appliedTo)
 	}
 
 	// 设置漏洞工具注册器（内置工具，必须设置）

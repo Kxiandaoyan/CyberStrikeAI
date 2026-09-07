@@ -13,6 +13,25 @@
 > [!IMPORTANT]
 > 仅可对自有系统或已获得明确授权的目标使用本平台。使用前请确认你的授权范围。
 
+## 为什么要有本地 CVE 语料（与上游流程对比）
+
+上游流程里，每换一个目标、每识别一个组件，模型都要从头跑一遍 7 步联网情报序列：
+CVE 库 → 搜索引擎×3 → 中文社区 → GitHub 搜 PoC → 资产引擎 → 即时情报 → 依赖扩展链。
+同一个 Jenkins、同一条 CVE，十个项目就重复联网搜十遍 —— **慢、留痕，而且搜到的东西用完即弃**。
+
+本版本把「搜」变成「查」，把「用完即弃」变成「永久沉淀」：
+
+| | 上游（每次全量联网） | 本版本（本地优先 + 实战沉淀） |
+|---|---|---|
+| 组件识别后 | 立即执行完整外网序列 | **第一跳查本地语料**（19 万条官方 CVE 记录，亚秒、离线、无痕） |
+| 打过的 CVE | 下次照旧从头联网搜 | **先查本地实战 POC 库** → 命中直接复用打法，外网序列大幅跳过 |
+| 搜到的知识 | 用完即弃，下次重搜 | 利用成功 → 草稿 → 人审 → 写入本地实战库，**越用越厚** |
+| 数据新鲜度 | 每次搜到什么算什么 | 官方层每日增量同步（CNA 源头，比 NVD 快 1-2 天） |
+
+闭环：第 N 次交战利用成功 → 漏洞记录（confirmed）→ 收尾自动生成 POC 草稿 →
+人审批准 → 写入 `data/corpus/poc/` → **第 N+1 次交战本地直接命中，不再联网搜索**。
+系统越用越快、越用越聪明。
+
 ## 相比上游新增了什么
 
 ### 1. 本地近 5 年 CVE 语料仓（离线优先的漏洞情报）
@@ -22,7 +41,7 @@
   agent 工具集）：`zvec_grep_search` 支持语义 / fts 混合检索，检索时自动增量索引。
 - 另有分页浏览 / 搜索 API（`GET /api/cve-corpus/search`）与前端 CVE 检索页。
 - 配套 Skill：`local-corpus-cve`（何时用 / 何时不用 / 怎么调），组件识别后的第一跳是**本地语料**，
-  本地不足再走外网序列（`component-vuln-intel` 已改为本地优先）。
+  本地不足再走外网序列（`component-vuln-intel` 已改为本地优先，命中后外网按 CVE-ID 定向搜）。
 
 ### 2. CVE 每日增量同步（cvesync）
 - 纯 HTTP 的 GitHub 增量：commits + compare API 分批拿变更文件，只重抽变更项为 md；
@@ -31,25 +50,37 @@
   `last_error` 并在下轮重试；数量闸门（总量 ≥80% 且非新年份单年 ≥ `min_year_files`）防灾难性覆盖。
 - 每天本地 3 点定时 + 启动 36h 补跑；`POST /api/cve-corpus/sync?full=1` 可手动全量重建。
 
-### 3. GitHub-C2 交接（长期维权 handoff）
-- 内置 C2 Beacon 没有目标侧自启动/长期维权；本版本新增与独立部署的
-  [GitHub-C2](https://github.com/) 控制器的**交接**链路：人在 G-C2 控制台生成 Agent →
-  在 CS 设置页保存「目标可达的下载地址」→ CS 经在线 Beacon 投递一次 →
-  按「主机名 + 新出现」判定上线 → 记黑板后**不再使用该信道**。
+### 3. 实战 POC 沉淀（本地越用越快的核心）
+- 交战中利用成功并记录 confirmed 漏洞后，收尾时自动从漏洞记录（复现步骤/前提/证据）
+  **机械组装 POC 草稿**（不过 LLM，命令逐字保真，IPv4 脱敏）—— 每条漏洞一生只生成一次。
+- 人工批准（`applied_to = poc:CVE-YYYY-NNNN`）后写入 `data/corpus/poc/CVE-YYYY-NNNN.md`：
+  同一 CVE 多次交战追加带日期的「实战补记」段，**只增不减**。
+- 安全边界：每日同步永不覆盖实战层（cvesync 只写 `cve/{year}/`）；`data/` 被 gitignore，
+  **实战记录永不出现在公开仓库**；无任何自动写入路径（`auto_apply` 恒 false）。
+- 下次交战命中编号后：`fts + globs:["poc/**"]` 直接拉实战记录，核对前提后复用。
+
+### 4. GitHub-C2 交接（长期维权 handoff）
+- 内置 C2 Beacon 没有目标侧自启动/长期维权；本版本新增与独立部署的 GitHub-C2 控制器的
+  **交接**链路：人在 G-C2 控制台生成 Agent → 在 CS 设置页保存「目标可达的下载地址」→
+  CS 经在线 Beacon 投递一次 → 按「主机名 + 新出现」判定上线 → 记黑板后**不再使用该信道**。
 - 内置两个只读 MCP 工具：`github_c2_handoff_source`（读已保存的投递配置）、
   `github_c2_list_agents`（refresh + 结构化列表，含自动登录/会话过期重登）。
 - 设置页「GitHub-C2 交接」小节独立保存（不校验 OpenAI 必填），控制器凭据**只写不回显**；
   C2 会话页有只读回显。配套 Skill：`handoff-github-c2`（含判定纪律与 `persist/handoff-url-override` 约定）。
 
-### 4. 经验总结（项目收尾 → 人审 → 入库）
+### 5. 经验总结（项目收尾 → 人审 → 入库）
 - 项目可交付完成 / 批量队列收尾时，自动汇总黑板事实与漏洞记录，经独立 LLM 配置
   （可用便宜模型）生成**脱敏经验草稿**（IPv4 机械脱敏 + 提示词约束；min_facts 门槛 + 24h 去重）。
 - 人工在 `/api/experience/drafts` 审批：批准时可选择写入知识库「经验总结」分类，
   或以「经验补丁」段落追加 / 新建到某个 Skill 的 `SKILL.md`。
+- **与 POC 沉淀不冲突、同队列不同类别**：经验草稿（category=methodology）蒸馏的是跨项目
+  方法论（检测顺序/误报辨别/换路思路），走 min_facts 门槛和 LLM；POC 草稿（category=poc）
+  记录的是单条漏洞的实战利用（复现步骤逐字保真），独立于 min_facts、不过 LLM。
+  一次成功的交战通常同时产出两类草稿，各入各库。
 - `auto_apply` 恒为 false：**没有任何自动入库路径**，会话中模型也没有写 Skill 的工具。
 - 批量队列整队只产出**一份**聚合草稿（子会话不重复触发）。
 
-### 5. 其他增强
+### 6. 其他增强
 - 配置持久化与工具注册的若干可靠性修复（设置保存即落 yaml；应用配置后工具完整重挂）。
 - CVE 语料目录按配置文件目录解析相对路径，支持任意工作目录启动。
 - `orchestrator.md` / 单代理提示词 / `pentest-blackboard` 等提示词与本地语料、交接纪律对齐。
@@ -82,7 +113,7 @@ cd CyberStrikeAI
 首次启动后：
 1. 复制/对照 `config.example.yaml` 生成 `config.yaml`（二进制首次启动也会自动从模板创建）。
 2. 按需打开开关：`zvec_grep.enabled`（本地 CVE 检索）、`cve_corpus.enabled`（每日增量同步）、
-   `experience.enabled` + `auto_draft`（经验草稿）、`github_c2`（交接配置，可在网页设置页保存）。
+   `experience.enabled` + `auto_draft`（经验 + POC 草稿）、`github_c2`（交接配置，可在网页设置页保存）。
 3. 浏览器打开 `https://127.0.0.1:8080`（自签证书；`./run.sh --http` 用纯 HTTP），
    首次启动日志会打印管理员初始密码。
 
@@ -96,7 +127,8 @@ cd CyberStrikeAI
 # 方式二：手动解压
 mkdir -p data/corpus
 tar xzf assets/cve-corpus.tar.gz -C data/corpus
-# 解压后：data/corpus/cve/{2022..2026}/CVE-*.md
+# 解压后：data/corpus/cve/{2022..2026}/CVE-*.md（官方层）
+#        data/corpus/poc/（实战层，由你自己的交战沉淀，自动创建）
 ```
 
 解压后即可使用 CVE 检索页与 `zvec_grep_search`；首次语义索引由 `run.sh` 在后台构建

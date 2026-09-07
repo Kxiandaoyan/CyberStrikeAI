@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -232,6 +233,8 @@ func (h *CveCorpusHandler) Search(c *gin.Context) {
 }
 
 // GetDetail: GET /api/cve-corpus/:id — lookup via scan cache (no path from URL).
+// When a human-approved 实战记录 exists in the local POC library
+// (corpus/poc/{id}.md), it is returned in the "poc" field.
 func (h *CveCorpusHandler) GetDetail(c *gin.Context) {
 	cveID := strings.ToUpper(strings.TrimSpace(c.Param("id")))
 	if len(cveID) < 9 || cveID[:4] != "CVE-" {
@@ -240,14 +243,33 @@ func (h *CveCorpusHandler) GetDetail(c *gin.Context) {
 	}
 	for _, ci := range h.scanCorpus() {
 		if ci.entry.ID == cveID {
-			c.JSON(http.StatusOK, gin.H{
+			resp := gin.H{
 				"id": cveID, "year": ci.entry.Year, "content": ci.content,
-			})
+			}
+			if poc, ok := h.readPoc(cveID); ok {
+				resp["poc"] = poc
+			}
+			c.JSON(http.StatusOK, resp)
 			return
 		}
 	}
 	c.JSON(http.StatusNotFound, gin.H{"error": "CVE not found"})
 }
+
+// readPoc reads the local POC library record for a CVE id, if any.
+func (h *CveCorpusHandler) readPoc(cveID string) (string, bool) {
+	if !cveDetailPocPattern.MatchString(cveID) {
+		return "", false
+	}
+	data, err := os.ReadFile(filepath.Join(h.corpusDir, "poc", cveID+".md"))
+	if err != nil || len(data) == 0 {
+		return "", false
+	}
+	return string(data), true
+}
+
+// cveDetailPocPattern guards the POC filename (id comes from the URL).
+var cveDetailPocPattern = regexp.MustCompile(`^CVE-\d{4}-\d{4,}$`)
 
 // State: GET /api/cve-corpus/state
 // Corpus scan stats merged with the cvesync watermark (state.json).

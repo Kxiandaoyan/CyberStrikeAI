@@ -15,19 +15,47 @@
 > [!IMPORTANT]
 > Use this platform only against systems you own or are explicitly authorized to test.
 
+## Why a local CVE corpus (vs. the upstream flow)
+
+Upstream, every new target and every identified component re-runs the full 7-step external
+intel sequence (CVE DBs → 3+ search engines → Chinese communities → GitHub PoC → asset
+engines → live intel → dependency chain). The same Jenkins, the same CVE — ten projects means
+ten identical web sweeps: **slow, fingerprinted, and everything found is thrown away**.
+
+This fork turns "search" into "lookup" and "throw away" into "accumulate":
+
+| | Upstream (full web sweep each time) | This fork (local-first + combat accumulation) |
+|---|---|---|
+| Component identified | run the entire external sequence | **first hit is the local corpus** (190k+ official records, sub-second, offline, zero egress) |
+| A CVE you've exploited before | search the web from scratch again | **check the local POC library first** → reuse the working recipe, skip most external steps |
+| Knowledge found | used once, discarded | exploit succeeds → draft → human review → written into the local library, **grows forever** |
+| Freshness | whatever the sweep returns | official layer synced daily from CNA (1-2 days ahead of NVD) |
+
+The loop: engagement N exploits a CVE → confirmed vulnerability record → closeout auto-drafts
+a POC → human approves → written to `data/corpus/poc/` → **engagement N+1 hits it locally and
+never searches the web for it again**. The system gets faster and smarter with every engagement.
+
 ## What's added on top of upstream
 
 1. **Local 5-year CVE corpus (offline-first vuln intel)** — official cvelistV5 data distilled
    into short Markdown (190k+ records, 2022–2026, no POCs), searched by the bundled
    [zvec-grep](https://github.com/zvec-ai/zvec-grep) service (hybrid semantic/fts, auto
    incremental indexing) plus a paginated browse API and UI page. Component identification
-   now hits the local corpus first (`local-corpus-cve` skill); public web sequences run only
-   when local hits are insufficient.
+   now hits the local corpus first (`local-corpus-cve` skill); external sequences run only
+   when local hits are insufficient, and then target the CVE-ID directly.
 2. **Daily incremental CVE sync (cvesync)** — pure-HTTP GitHub delta (commits + compare API,
    no git subprocess); an honest watermark (state advances only after every change lands),
    count gates (≥80% total, per-year floor), 3am daily + 36h catch-up, manual
    `POST /api/cve-corpus/sync?full=1`.
-3. **GitHub-C2 handoff (long-term persistence)** — the built-in Beacon has no target-side
+3. **Combat POC accumulation (the "faster over time" core)** — after a confirmed, CVE-tagged
+   vulnerability, closeout mechanically assembles a POC draft from the vulnerability record
+   (reproduction steps verbatim, no LLM rewrite, IPv4-redacted; one draft per vulnerability
+   ever). Human approval (`applied_to = poc:CVE-YYYY-NNNN`) writes/append a dated
+   「实战补记」section into `data/corpus/poc/CVE-YYYY-NNNN.md`. The daily sync never touches
+   the POC layer; `data/` is git-ignored so combat records never reach the public repo;
+   there is no automatic write path (`auto_apply` hard-locked false). Next engagement:
+   `fts + globs:["poc/**"]` pulls the recipe directly.
+4. **GitHub-C2 handoff (long-term persistence)** — the built-in Beacon has no target-side
    persistence; this fork adds a handoff chain to an independently deployed GitHub-C2
    controller: a human builds the agent and saves a target-reachable download URL in the
    settings page; CS delivers once via the online Beacon, verifies check-in by
@@ -35,13 +63,16 @@
    channel. Two read-only MCP tools (`github_c2_handoff_source`, `github_c2_list_agents`
    with auto re-login) plus a dedicated settings section (credentials write-only) and the
    `handoff-github-c2` skill.
-4. **Experience distillation (closeout → human review → library)** — project/batch completion
+5. **Experience distillation (closeout → human review → library)** — project/batch completion
    auto-generates redacted LLM drafts from blackboard facts (independent cheap model, IPv4
    redaction, min-facts gate, 24h dedup); humans approve via `/api/experience/drafts` into
-   the knowledge base or as patches appended to a skill's `SKILL.md`. `auto_apply` is
+   the knowledge base or as patches appended to a skill's `SKILL.md`. **Complementary to POC
+   drafts, same queue, different categories**: methodology drafts distill cross-project
+   method (LLM, min-facts gate); POC drafts record per-vulnerability exploitation steps
+   (mechanical, verbatim). A successful engagement typically produces both. `auto_apply` is
    hard-locked false; the model has no skill-writing tool in-session. A finished batch queue
    yields exactly one aggregated draft.
-5. **Reliability fixes** — settings now persist to `config.yaml` immediately, tools survive
+6. **Reliability fixes** — settings now persist to `config.yaml` immediately, tools survive
    config re-apply, corpus paths resolve against the config file directory, prompts/skills
    aligned with local-first and handoff discipline.
 
@@ -73,6 +104,8 @@ The unpacked `data/` tree (190k+ Markdown files) is intentionally not committed;
 
 ```bash
 mkdir -p data/corpus && tar xzf assets/cve-corpus.tar.gz -C data/corpus
+# official layer: data/corpus/cve/{2022..2026}/CVE-*.md
+# combat layer:   data/corpus/poc/ (created automatically, fed by your own engagements)
 ```
 
 The first semantic index build runs in the background after boot (local CPU embedding;

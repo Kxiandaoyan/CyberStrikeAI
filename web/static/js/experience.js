@@ -114,7 +114,18 @@
     }
 
     async function approveExperience(id) {
-        const appliedTo = prompt('应用到哪（留空 = 知识库「经验总结」；或填 skill:技能名 追加进对应 SKILL.md，如 skill:web-attack-methods）:', '') || '';
+        // POC 草稿默认预填 poc:CVE-ID（写入本地实战库 data/corpus/poc/）；
+        // 方法论草稿默认留空 = 知识库「经验总结」，或填 skill:技能名。
+        let def = '';
+        let hint = '应用到哪（留空 = 知识库「经验总结」；或填 skill:技能名 追加进对应 SKILL.md，如 skill:web-attack-methods）:';
+        if (currentDraft && currentDraft.category === 'poc') {
+            try {
+                const fk = JSON.parse(currentDraft.fact_keys || '[]');
+                if (fk.length > 0 && /^CVE-\d{4}-\d{4,}$/.test(fk[0])) def = 'poc:' + fk[0];
+            } catch (e) { /* ignore */ }
+            hint = 'POC 沉淀 — 写入本地实战库 data/corpus/poc/（同步不覆盖、不入公开仓库）。回车确认，或改成 skill:技能名 / 留空入知识库:';
+        }
+        const appliedTo = prompt(hint, def) || '';
         try {
             const r = await apiFetch(`/api/experience/drafts/${id}/approve`, {
                 method: 'POST',
