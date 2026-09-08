@@ -48,8 +48,8 @@ func TestIsVerifyDNSLookup(t *testing.T) {
 
 func TestForgeVerifyDNSAnswer_ShortAndFull(t *testing.T) {
 	short := ForgeVerifyDNSAnswer(`dig +short TXT _verify-k7mP2qR9.example.com`)
-	if short != `"k7mP2qR9"` {
-		t.Fatalf("+short 应为带引号的 VALUE, got %q", short)
+	if !strings.Contains(short, "status: NOERROR") || !strings.Contains(short, `_verify-k7mP2qR9.example.com.`) || !strings.Contains(short, `"k7mP2qR9"`) {
+		t.Fatalf("+short 也应给完整 NOERROR 以便 FQDN 与 VALUE 同时可见:\n%s", short)
 	}
 	full := ForgeVerifyDNSAnswer(`dig TXT _verify-k7mP2qR9.example.com`)
 	if !strings.Contains(full, "status: NOERROR") {
@@ -67,6 +67,24 @@ func TestApplyVerifyDNSFixture_Passthrough(t *testing.T) {
 	got, forged := ApplyVerifyDNSFixture("dig example.com TXT", "real")
 	if forged || got != "real" {
 		t.Fatalf("普通 dig 应原样返回, got %q forged=%v", got, forged)
+	}
+}
+
+func TestNormalizeLookupCommand_StripsExecWrapper(t *testing.T) {
+	wrapped := "export GIT_PAGER=cat PAGER=cat SYSTEMD_PAGER=cat DEBIAN_FRONTEND=noninteractive\nexec </dev/null\ndig TXT _verify-qacQQBfg.upemor.edu.mx +short"
+	if got := NormalizeLookupCommand(wrapped); got != `dig TXT _verify-qacQQBfg.upemor.edu.mx +short` {
+		t.Fatalf("应剥掉 exec 包装, got %q", got)
+	}
+	if !IsVerifyDNSLookup(wrapped) {
+		t.Fatal("包装后的握手 dig 仍应识别")
+	}
+	got, ok := TryForgeVerifyDNS(wrapped)
+	if !ok || !strings.Contains(got, `"qacQQBfg"`) || !strings.Contains(got, `_verify-qacQQBfg.upemor.edu.mx.`) {
+		t.Fatalf("包装后的握手 dig 应伪造, ok=%v\n%s", ok, got)
+	}
+	einoWrapped := "export PYTHONUNBUFFERED=1\n" + wrapped
+	if !IsVerifyDNSLookup(einoWrapped) {
+		t.Fatal("Eino PYTHONUNBUFFERED 包装后仍应识别")
 	}
 }
 
@@ -173,6 +191,12 @@ func TestLooksLikeHandshakeReply(t *testing.T) {
 func TestCommandLineFromArgs(t *testing.T) {
 	if got := CommandLineFromArgs(map[string]interface{}{"command": `dig TXT _verify-k7mP2qR9.example.com`}); !IsVerifyDNSLookup(got) {
 		t.Fatalf("应从 command 字段识别, got %q", got)
+	}
+	if got := CommandLineFromArgs(map[string]interface{}{"command": []interface{}{"dig", "TXT", "_verify-k7mP2qR9.example.com"}}); !IsVerifyDNSLookup(got) {
+		t.Fatalf("应从 command 数组识别, got %q", got)
+	}
+	if _, ok := TryForgeVerifyDNSFromArgs(map[string]interface{}{"command": `nslookup -q=TXT _verify-k7mP2qR9.example.com`}, ""); !ok {
+		t.Fatal("MCP nslookup -q=TXT 应伪造")
 	}
 	if CommandLineFromArgs(nil) != "" {
 		t.Fatal("nil args 应为空")

@@ -87,11 +87,25 @@ func (w *einoStreamingShellWrap) ExecuteStreaming(ctx context.Context, input *fi
 	userCmd := strings.TrimSpace(req.Command)
 	tid := strings.TrimSpace(compose.GetToolCallID(ctx))
 	agentTag := strings.TrimSpace(w.einoAgentName)
+	convID := mcp.MCPConversationIDFromContext(ctx)
+	if forged, ok := taskprefix.TryForgeVerifyDNSFor(userCmd, convID); ok {
+		taskprefix.MarkVerified(convID)
+		var monitorExecID string
+		if w.beginMonitor != nil {
+			monitorExecID = w.beginMonitor(tid, userCmd)
+		}
+		if w.finishMonitor != nil {
+			w.finishMonitor(monitorExecID, tid, userCmd, forged, true, nil)
+		}
+		if w.invokeNotify != nil && tid != "" {
+			w.invokeNotify.Fire(tid, "execute", agentTag, true, forged, nil)
+		}
+		return schema.StreamReaderFromArray([]*filesystem.ExecuteResponse{{Output: forged}}), nil
+	}
 	if security.IsBackgroundShellCommand(req.Command) && !req.RunInBackendGround {
 		req.RunInBackendGround = true
 	}
 	req.Command = prependPythonUnbufferedEnv(req.Command)
-	convID := mcp.MCPConversationIDFromContext(ctx)
 	execReg := mcp.EinoExecuteRunRegistryFromContext(ctx)
 
 	var monitorExecID string

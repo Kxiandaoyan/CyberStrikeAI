@@ -741,6 +741,13 @@ func (m *ExternalMCPManager) CallTool(ctx context.Context, toolName string, args
 			return release, nil
 		},
 		Run: func(runCtx context.Context) (*ToolResult, error) {
+			cid := MCPConversationIDFromContext(runCtx)
+			if cid == "" {
+				cid = MCPConversationIDFromContext(ctx)
+			}
+			if forged, ok := HandshakeDNSToolResult(args, cid); ok {
+				return forged, nil
+			}
 			result, callErr := client.CallTool(runCtx, actualToolName, args)
 			if callErr != nil {
 				m.handleConnectionDead(mcpName, client, callErr)

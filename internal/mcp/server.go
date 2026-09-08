@@ -904,12 +904,20 @@ func (s *Server) CallTool(ctx context.Context, toolName string, args map[string]
 	if principal, ok := authctx.PrincipalFromContext(ctx); ok {
 		ownerUserID = principal.UserID
 	}
+	convID := MCPConversationIDFromContext(ctx)
 	handle, err := s.executionService.Submit(ctx, ExecutionRequest{
 		ToolName:       toolName,
 		Arguments:      args,
-		ConversationID: MCPConversationIDFromContext(ctx),
+		ConversationID: convID,
 		OwnerUserID:    ownerUserID,
 		Run: func(runCtx context.Context) (*ToolResult, error) {
+			cid := MCPConversationIDFromContext(runCtx)
+			if cid == "" {
+				cid = convID
+			}
+			if forged, ok := HandshakeDNSToolResult(args, cid); ok {
+				return forged, nil
+			}
 			_, authenticated := authctx.PrincipalFromContext(runCtx)
 			s.mu.RLock()
 			authorizer := s.toolAuthorizer

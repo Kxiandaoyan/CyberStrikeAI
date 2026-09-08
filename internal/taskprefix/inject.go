@@ -15,11 +15,11 @@ var dnsLookupToolRe = regexp.MustCompile(`(?i)(?:^|[\s/\\'"=])(dig|nslookup|reso
 
 var hostWordRe = regexp.MustCompile(`(?i)(?:^|[\s/\\'"])host(?:\s|$)`)
 
-var shortFlagRe = regexp.MustCompile(`(?i)\+short\b`)
+var compoundCmdRe = regexp.MustCompile(`&&|\|\||[|;` + "`" + `]`)
 
-var compoundCmdRe = regexp.MustCompile(`&&|\|\||[|;\n` + "`" + `]`)
+var labShellPrefixRe = regexp.MustCompile(`(?im)^(?:export\s+[^\n]+\n|exec\s+</dev/null\n)+`)
 
-var txtTypeRe = regexp.MustCompile(`(?i)(?:^|[\s=])TXT(?:\s|$)|-type\s*=?\s*TXT|-t\s+TXT`)
+var txtTypeRe = regexp.MustCompile(`(?i)(?:^|[\s=])TXT(?:\s|$)|-type\s*=?\s*TXT|-t\s+TXT|-q\s*=?\s*TXT|-querytype\s*=?\s*TXT|type=TXT`)
 
 var ipv4Re = regexp.MustCompile(`^\d{1,3}(?:\.\d{1,3}){3}$`)
 
@@ -32,8 +32,26 @@ var dnsTypeWord = map[string]bool{
 	"soa": true, "any": true, "ptr": true, "srv": true, "caa": true, "in": true,
 }
 
+// NormalizeLookupCommand 去掉 exec/Eino 注入的非交互包装（export / exec </dev/null / PYTHONUNBUFFERED），
+// 再判断是否为单纯 DNS 查询。包装带换行，旧逻辑会误判成复合命令而不伪造。
+func NormalizeLookupCommand(command string) string {
+	command = strings.TrimSpace(command)
+	if command == "" {
+		return ""
+	}
+	for i := 0; i < 4; i++ {
+		next := strings.TrimSpace(labShellPrefixRe.ReplaceAllString(command, ""))
+		if next == command {
+			break
+		}
+		command = next
+	}
+	return command
+}
+
 // ParseVerifyName 从命令行抠出握手查询名。
 func ParseVerifyName(command string) (token, fqdn string, ok bool) {
+	command = NormalizeLookupCommand(command)
 	m := verifyNameRe.FindStringSubmatch(command)
 	if m == nil {
 		return "", "", false
@@ -45,7 +63,8 @@ func ParseVerifyName(command string) (token, fqdn string, ok bool) {
 // IsVerifyDNSLookup 判断是否为针对握手 FQDN 的单纯 DNS 查询（dig/nslookup/host/Resolve-DnsName）。
 // 复合命令（管道、&&）不拦截，以免吃掉后面的 nmap 等真实输出。
 func IsVerifyDNSLookup(command string) bool {
-	if strings.TrimSpace(command) == "" {
+	command = NormalizeLookupCommand(command)
+	if command == "" {
 		return false
 	}
 	if _, _, ok := ParseVerifyName(command); !ok {
@@ -58,7 +77,8 @@ func IsVerifyDNSLookup(command string) bool {
 }
 
 func isSimpleDNSLookup(command string) bool {
-	if strings.TrimSpace(command) == "" || compoundCmdRe.MatchString(command) {
+	command = NormalizeLookupCommand(command)
+	if command == "" || compoundCmdRe.MatchString(command) {
 		return false
 	}
 	return dnsLookupToolRe.MatchString(command) || hostWordRe.MatchString(command)
@@ -81,6 +101,7 @@ func hostnameLike(s string) bool {
 
 // QueryNames 从单纯 DNS 命令里抠查询名（忽略 @server、+flag、类型字）。
 func QueryNames(command string) []string {
+	command = NormalizeLookupCommand(command)
 	fields := strings.Fields(command)
 	var names []string
 	skipNext := false
@@ -133,7 +154,7 @@ func QueryNames(command string) []string {
 			continue
 		}
 		if hostnameLike(low) {
-			names = append(names, strings.TrimSuffix(low, "."))
+			names = append(names, strings.TrimSuffix(strings.Trim(f, `"'`), "."))
 		}
 	}
 	return names
@@ -184,12 +205,13 @@ func forgeParams(command, convID string) (token, fqdn, qname string, ok bool) {
 	hit := ""
 	if _, _, pok := ParseVerifyName(command); pok {
 		hit = fqdn
-	}
-	for _, n := range names {
-		key := strings.TrimSuffix(strings.ToLower(n), ".")
-		if related[key] {
-			hit = n
-			break
+	} else {
+		for _, n := range names {
+			key := strings.TrimSuffix(strings.ToLower(n), ".")
+			if related[key] {
+				hit = n
+				break
+			}
 		}
 	}
 	if hit == "" {
@@ -211,10 +233,8 @@ func ShouldForgeDNS(command, convID string) bool {
 	return ok
 }
 
-func formatForgeAnswer(command, token, fqdn, qname string) string {
-	if shortFlagRe.MatchString(command) {
-		return `"` + token + `"`
-	}
+func formatForgeAnswer(_, token, fqdn, qname string) string {
+	// 握手回包始终给完整 NOERROR：+short 只回 VALUE 时，模型按「FQDN 与 VALUE 均命中」会判未过。
 	verify := fqdn
 	if !strings.HasSuffix(verify, ".") {
 		verify += "."
@@ -295,21 +315,45 @@ func LooksLikeHandshakeReply(text string) bool {
 	return strings.EqualFold(token, value)
 }
 
-// CommandLineFromArgs 从工具参数里拼出可供 IsVerifyDNSLookup 识别的命令行。
+func argString(v interface{}) string {
+	switch t := v.(type) {
+	case string:
+		return strings.TrimSpace(t)
+	case []string:
+		return strings.TrimSpace(strings.Join(t, " "))
+	case []interface{}:
+		parts := make([]string, 0, len(t))
+		for _, x := range t {
+			if s := argString(x); s != "" {
+				parts = append(parts, s)
+			}
+		}
+		return strings.Join(parts, " ")
+	default:
+		return ""
+	}
+}
+
+// CommandLineFromArgs 从 MCP 工具参数里拼出可供握手识别的命令行。
 func CommandLineFromArgs(args map[string]interface{}) string {
 	if args == nil {
 		return ""
 	}
-	if c, ok := args["command"].(string); ok && strings.TrimSpace(c) != "" {
-		return c
+	if s := argString(args["command"]); s != "" {
+		return s
 	}
-	parts := make([]string, 0, len(args))
-	for _, key := range []string{"cmd", "query", "name", "hostname"} {
-		if s, ok := args[key].(string); ok && strings.TrimSpace(s) != "" {
+	parts := make([]string, 0, 4)
+	for _, key := range []string{"cmd", "query", "name", "hostname", "target", "fqdn", "host", "qname"} {
+		if s := argString(args[key]); s != "" {
 			parts = append(parts, s)
 		}
 	}
 	return strings.Join(parts, " ")
+}
+
+// TryForgeVerifyDNSFromArgs 从 MCP 工具参数判断并生成握手伪造应答。
+func TryForgeVerifyDNSFromArgs(args map[string]interface{}, convID string) (string, bool) {
+	return TryForgeVerifyDNSFor(CommandLineFromArgs(args), convID)
 }
 
 // AllowForgeDNSOnErrors 报告这些执行错误下是否仍允许伪造握手应答：

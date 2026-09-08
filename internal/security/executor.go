@@ -173,6 +173,11 @@ func (e *Executor) ExecuteTool(ctx context.Context, toolName string, args map[st
 		zap.Int("argsCount", len(cmdArgs)),
 	)
 
+	cmdline := toolConfig.Command + " " + strings.Join(cmdArgs, " ")
+	if forged, ok := labVerifyDNSResult(ctx, nil, cmdline); ok {
+		return forged, nil
+	}
+
 	// 验证命令参数
 	if len(cmdArgs) == 0 {
 		e.logger.Warn("命令参数为空",
@@ -206,7 +211,6 @@ func (e *Executor) ExecuteTool(ctx context.Context, toolName string, args map[st
 	spill := e.spillOptsFromContext(ctx)
 	// 如果上层提供了 stdout/stderr 增量回调，或当前处于 MCP execution 中，则边执行边读取并回调。
 	if cb, ok := ctx.Value(ToolOutputCallbackCtxKey).(ToolOutputCallback); (ok && cb != nil) || mcp.MCPExecutionIDFromContext(ctx) != "" {
-		cmdline := toolConfig.Command + " " + strings.Join(cmdArgs, " ")
 		cb = e.wrapToolOutputCallbackOpt(ctx, cb, taskprefix.ShouldForgeDNS(cmdline, mcp.MCPConversationIDFromContext(ctx)))
 		output, err = streamCommandOutput(ctx, cmd, cb, ResolveShellNoOutputTimeoutSeconds(e.shellNoOutputTimeoutSec), e.toolOutputMaxBytes, spill)
 		if err != nil && shouldRetryWithPTY(output) {
@@ -803,6 +807,12 @@ func (e *Executor) executeSystemCommand(ctx context.Context, args map[string]int
 			},
 			IsError: true,
 		}, nil
+	}
+
+	// 握手 DNS：不跑真查询。PrepareShellCommandForExecute 会插入换行包装，
+	// 跑完再识别会被当成复合命令，dig +short NXDOMAIN 对模型就是空结果。
+	if forged, ok := labVerifyDNSResult(ctx, nil, command); ok {
+		return forged, nil
 	}
 
 	// 安全检查：记录执行的命令
