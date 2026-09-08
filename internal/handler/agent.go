@@ -910,8 +910,8 @@ func (h *AgentHandler) ProcessMessageForRobot(ctx context.Context, platform stri
 			roleTools = r.Tools
 		}
 	}
-	// 机器人仅会话首条（无历史）加握手；落库仍用裸 message。
-	finalMessage := taskprefix.Apply(rolePrompt, message, len(agentHistoryMessages) == 0)
+	// 机器人仅会话首条加握手；跟轮若上轮拒扫/只回三行则补核对句。落库仍用裸 message。
+	finalMessage := applyHandshakeUserMessage(rolePrompt, message, conversationID, agentHistoryMessages)
 
 	if _, err = h.db.AddMessage(conversationID, "user", message, nil); err != nil {
 		return "", "", fmt.Errorf("保存用户消息失败: %w", err)
@@ -1460,6 +1460,7 @@ func (h *AgentHandler) createProgressCallback(runCtx context.Context, cancelRun 
 			} else {
 				respPlan.b.WriteString(message)
 			}
+			taskprefix.RememberFromText(conversationID, respPlan.b.String())
 			if dataMap, ok := data.(map[string]interface{}); ok && respPlan.meta == nil {
 				respPlan.meta = make(map[string]interface{}, len(dataMap))
 				for k, v := range dataMap {

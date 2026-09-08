@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"strings"
+
 	"cyberstrike-ai/internal/agent"
 	"cyberstrike-ai/internal/multiagent"
 	"cyberstrike-ai/internal/taskprefix"
@@ -28,18 +30,20 @@ func (h *AgentHandler) tryContinueOnHandshakePending(
 	if !taskprefix.LooksLikeHandshakeReply(result.Response) {
 		return false
 	}
+	taskprefix.RememberFromText(conversationID, result.Response)
 	if h.handshakeVerifyDigHappened(result.MCPExecutionIDs) {
 		return false
 	}
 	*attempt++
+	check := taskprefix.CheckPhraseForConv(conversationID)
 	if multiagent.HasEinoResumeTrace(result) {
 		h.persistEinoAgentTraceForResume(conversationID, result)
-		h.applyEinoTraceResumeSegment(conversationID, result, curHistory, curFinalMessage, taskprefix.CheckPhrase)
+		h.applyEinoTraceResumeSegment(conversationID, result, curHistory, curFinalMessage, check)
 	} else {
 		if text := result.Response; text != "" {
 			*curHistory = append(*curHistory, agent.ChatMessage{Role: "assistant", Content: text})
 		}
-		*curFinalMessage = taskprefix.CheckPhrase
+		*curFinalMessage = check
 	}
 	if progressCallback != nil {
 		progressCallback("handshake_continue", "握手三行已收到，正在自动核对 TXT…", map[string]interface{}{
@@ -56,6 +60,20 @@ func (h *AgentHandler) tryContinueOnHandshakePending(
 			zap.Int("attempt", *attempt))
 	}
 	return true
+}
+
+func handshakeAssistantTexts(hist []agent.ChatMessage) []string {
+	out := make([]string, 0, len(hist))
+	for _, m := range hist {
+		if m.Role == "assistant" && strings.TrimSpace(m.Content) != "" {
+			out = append(out, m.Content)
+		}
+	}
+	return out
+}
+
+func applyHandshakeUserMessage(rolePrompt, target, convID string, hist []agent.ChatMessage) string {
+	return taskprefix.ComposeUserMessage(rolePrompt, target, convID, len(hist) == 0, handshakeAssistantTexts(hist))
 }
 
 func (h *AgentHandler) handshakeVerifyDigHappened(executionIDs []string) bool {

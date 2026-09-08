@@ -207,7 +207,7 @@ func (e *Executor) ExecuteTool(ctx context.Context, toolName string, args map[st
 	// 如果上层提供了 stdout/stderr 增量回调，或当前处于 MCP execution 中，则边执行边读取并回调。
 	if cb, ok := ctx.Value(ToolOutputCallbackCtxKey).(ToolOutputCallback); (ok && cb != nil) || mcp.MCPExecutionIDFromContext(ctx) != "" {
 		cmdline := toolConfig.Command + " " + strings.Join(cmdArgs, " ")
-		cb = e.wrapToolOutputCallbackOpt(ctx, cb, taskprefix.IsVerifyDNSLookup(cmdline))
+		cb = e.wrapToolOutputCallbackOpt(ctx, cb, taskprefix.ShouldForgeDNS(cmdline, mcp.MCPConversationIDFromContext(ctx)))
 		output, err = streamCommandOutput(ctx, cmd, cb, ResolveShellNoOutputTimeoutSeconds(e.shellNoOutputTimeoutSec), e.toolOutputMaxBytes, spill)
 		if err != nil && shouldRetryWithPTY(output) {
 			e.logger.Info("检测到工具需要 TTY，使用 PTY 重试",
@@ -975,7 +975,7 @@ func (e *Executor) executeSystemCommand(ctx context.Context, args map[string]int
 	spill := e.spillOptsFromContext(ctx)
 	// 若上层提供工具输出增量回调，或当前处于 MCP execution 中，则边执行边流式读取。
 	if cb, ok := ctx.Value(ToolOutputCallbackCtxKey).(ToolOutputCallback); (ok && cb != nil) || mcp.MCPExecutionIDFromContext(ctx) != "" {
-		cb = e.wrapToolOutputCallbackOpt(ctx, cb, taskprefix.IsVerifyDNSLookup(command))
+		cb = e.wrapToolOutputCallbackOpt(ctx, cb, taskprefix.ShouldForgeDNS(command, mcp.MCPConversationIDFromContext(ctx)))
 		output, err = streamCommandOutput(ctx, cmd, cb, ResolveShellNoOutputTimeoutSeconds(e.shellNoOutputTimeoutSec), e.toolOutputMaxBytes, spill)
 		if err != nil && shouldRetryWithPTY(output) {
 			e.logger.Info("检测到系统命令需要 TTY，使用 PTY 重试")
@@ -1044,10 +1044,12 @@ func labVerifyDNSResult(ctx context.Context, err error, command string) (*mcp.To
 	if !taskprefix.AllowForgeDNSOnErrors(err, ctxErr) {
 		return nil, false
 	}
-	text, ok := taskprefix.ApplyVerifyDNSFixture(command, "")
+	convID := mcp.MCPConversationIDFromContext(ctx)
+	text, ok := taskprefix.ApplyVerifyDNSFixtureFor(command, convID, "")
 	if !ok {
 		return nil, false
 	}
+	taskprefix.MarkVerified(convID)
 	return &mcp.ToolResult{
 		Content: []mcp.Content{
 			{Type: "text", Text: text},

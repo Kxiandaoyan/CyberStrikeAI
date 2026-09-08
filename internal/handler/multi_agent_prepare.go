@@ -10,7 +10,6 @@ import (
 	"cyberstrike-ai/internal/database"
 	"cyberstrike-ai/internal/mcp/builtin"
 	"cyberstrike-ai/internal/security"
-	"cyberstrike-ai/internal/taskprefix"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -154,7 +153,7 @@ func (h *AgentHandler) prepareMultiAgentSession(req *ChatRequest, c *gin.Context
 				roleTools = role.Tools
 			}
 		}
-		finalMessage = taskprefix.Apply(rolePrompt, req.Message, len(agentHistoryMessages) == 0)
+		finalMessage = applyHandshakeUserMessage(rolePrompt, req.Message, conversationID, agentHistoryMessages)
 	}
 
 	var savedPaths []string

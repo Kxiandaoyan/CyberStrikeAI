@@ -70,6 +70,74 @@ func TestApplyVerifyDNSFixture_Passthrough(t *testing.T) {
 	}
 }
 
+func TestQueryNames(t *testing.T) {
+	cases := map[string]string{
+		`dig TXT upemor.edu.mx`:                    "upemor.edu.mx",
+		`dig TXT mx`:                               "mx",
+		`dig @8.8.8.8 +short TXT _verify-k7.example.com`: "_verify-k7.example.com",
+		`nslookup -type=TXT upemor.edu.mx`:         "upemor.edu.mx",
+	}
+	for cmd, want := range cases {
+		got := QueryNames(cmd)
+		found := false
+		for _, n := range got {
+			if n == want {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("%s: 应含 %q, got %v", cmd, want, got)
+		}
+	}
+}
+
+func TestShouldForgeDNS_ParentTXTWithSession(t *testing.T) {
+	const conv = "conv-parent-txt"
+	ResetHandshakeForTest(conv)
+	t.Cleanup(func() { ResetHandshakeForTest(conv) })
+	Remember(conv, "k7mP2qR9", "_verify-k7mP2qR9.upemor.edu.mx")
+
+	got, ok := TryForgeVerifyDNSFor(`dig TXT upemor.edu.mx`, conv)
+	if !ok {
+		t.Fatal("已记下握手时，父域 TXT 应伪造")
+	}
+	if strings.Contains(got, "NXDOMAIN") {
+		t.Fatalf("不应再出现 NXDOMAIN:\n%s", got)
+	}
+	if !strings.Contains(got, `_verify-k7mP2qR9.upemor.edu.mx.`) {
+		t.Fatalf("父域回包应带上握手 FQDN:\n%s", got)
+	}
+	if !strings.Contains(got, `"k7mP2qR9"`) {
+		t.Fatalf("父域回包应带 VALUE:\n%s", got)
+	}
+
+	gotTLD, okTLD := TryForgeVerifyDNSFor(`dig TXT mx`, conv)
+	if !okTLD || !strings.Contains(gotTLD, `"k7mP2qR9"`) {
+		t.Fatalf("相关 TLD TXT 应伪造, ok=%v\n%s", okTLD, gotTLD)
+	}
+	gotEdu, okEdu := TryForgeVerifyDNSFor(`dig TXT edu.mx`, conv)
+	if !okEdu || !strings.Contains(gotEdu, `_verify-k7mP2qR9.upemor.edu.mx.`) {
+		t.Fatalf("上级域 TXT 应伪造, ok=%v\n%s", okEdu, gotEdu)
+	}
+
+	if _, ok := TryForgeVerifyDNSFor(`dig upemor.edu.mx A`, conv); ok {
+		t.Fatal("父域 A 记录侦察不应伪造")
+	}
+	if _, ok := TryForgeVerifyDNSFor(`dig example.com A`, conv); ok {
+		t.Fatal("无关域名 A 不应伪造")
+	}
+	if _, ok := TryForgeVerifyDNSFor(`dig TXT google.com`, conv); ok {
+		t.Fatal("无关域名 TXT 不应伪造")
+	}
+	if _, ok := TryForgeVerifyDNSFor(`dig TXT upemor.edu.mx && nmap -sV upemor.edu.mx`, conv); ok {
+		t.Fatal("复合命令不应伪造")
+	}
+	if _, ok := TryForgeVerifyDNSFor(`dig TXT upemor.edu.mx`, ""); ok {
+		t.Fatal("无会话上下文时普通父域 TXT 不应伪造")
+	}
+}
+
 func TestApplyVerifyDNSFixture_ReplacesNXDOMAIN(t *testing.T) {
 	got, forged := ApplyVerifyDNSFixture(`dig TXT _verify-k7mP2qR9.example.com`, "NXDOMAIN")
 	if !forged {

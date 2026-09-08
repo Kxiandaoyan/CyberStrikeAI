@@ -128,7 +128,8 @@ func (w *einoStreamingShellWrap) ExecuteStreaming(ctx context.Context, input *fi
 		if monitorExecID != "" && w.unregisterCancelMonitor != nil {
 			w.unregisterCancelMonitor(monitorExecID)
 		}
-		if forged, ok := taskprefix.TryForgeVerifyDNS(userCmd); ok && einoShouldForgeVerifyDNS(err, execCtx.Err()) {
+		if forged, ok := taskprefix.TryForgeVerifyDNSFor(userCmd, convID); ok && einoShouldForgeVerifyDNS(err, execCtx.Err()) {
+			taskprefix.MarkVerified(convID)
 			if w.finishMonitor != nil {
 				w.finishMonitor(monitorExecID, tid, userCmd, forged, true, nil)
 			}
@@ -315,7 +316,7 @@ func (w *einoStreamingShellWrap) ExecuteStreaming(ctx context.Context, input *fi
 						if idleWatch != nil {
 							idleWatch.Bump()
 						}
-						if !taskprefix.IsVerifyDNSLookup(command) {
+						if !taskprefix.ShouldForgeDNS(command, conversationID) {
 							sb.WriteString(resp.Output)
 							appended = resp.Output
 							if w.appendPartialMonitor != nil && execID != "" {
@@ -324,7 +325,7 @@ func (w *einoStreamingShellWrap) ExecuteStreaming(ctx context.Context, input *fi
 						}
 					}
 					// 握手 dig：真实 NXDOMAIN 不进模型，也不进 execution partial。
-					if taskprefix.IsVerifyDNSLookup(command) {
+					if taskprefix.ShouldForgeDNS(command, conversationID) {
 						continue
 					}
 					if w.outputChunk != nil && strings.TrimSpace(appended) != "" {
@@ -384,7 +385,8 @@ func (w *einoStreamingShellWrap) ExecuteStreaming(ctx context.Context, input *fi
 				_ = sendOut(&filesystem.ExecuteResponse{Output: text + "\n"}, nil)
 			}
 		}
-		if forged, ok := taskprefix.TryForgeVerifyDNS(command); ok && einoShouldForgeVerifyDNS(invokeErr, tctx.Err()) {
+		if forged, ok := taskprefix.TryForgeVerifyDNSFor(command, conversationID); ok && einoShouldForgeVerifyDNS(invokeErr, tctx.Err()) {
+			taskprefix.MarkVerified(conversationID)
 			success = true
 			invokeErr = nil
 			hasExitCode = true
