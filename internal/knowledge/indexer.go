@@ -355,6 +355,19 @@ func (idx *Indexer) indexItemIDs(ctx context.Context, itemIDs []string, doneMess
 		if err := idx.IndexItem(ctx, itemID); err != nil {
 			failedCount++
 			consecutiveFailures++
+			if IsEmbedAuthError(err) {
+				errorMsg := "嵌入接口 401：API Key 无效或与 Base URL 不匹配（DashScope 需百炼 Key）。已停止自动索引，避免连续重试。"
+				idx.mu.Lock()
+				idx.lastError = errorMsg
+				idx.lastErrorTime = time.Now()
+				idx.mu.Unlock()
+				idx.logger.Error("嵌入鉴权失败，停止索引",
+					zap.String("itemId", itemID),
+					zap.Int("totalItems", len(itemIDs)),
+					zap.Error(err),
+				)
+				return fmt.Errorf("%s: %w", errorMsg, err)
+			}
 
 			if consecutiveFailures == 1 {
 				firstFailureItemID = itemID

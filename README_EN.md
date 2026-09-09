@@ -15,6 +15,16 @@
 > [!IMPORTANT]
 > Use this platform only against systems you own or are explicitly authorized to test.
 
+> [!IMPORTANT]
+> **GITHUB-C2 HANDOFF (NOW PUBLIC)**
+>
+> This fork talks to the public persistence controller **[Kxiandaoyan/github-C2](https://github.com/Kxiandaoyan/github-C2)**.
+> The built-in Beacon is for this engagement only; long-term retention is your own github-C2.
+> You build the agent there and host a target-reachable URL → save the controller login and URL
+> under Settings → C2 → persistence handoff → CS delivers once via an online Beacon →
+> verifies check-in by "hostname + newly-appeared" → then stops using that channel.
+> Repo: <https://github.com/Kxiandaoyan/github-C2> (contract in section 4 below).
+
 > [!NOTE]
 > **New in this update (2026-09) — pre-engagement lab verification handshake**: CS
 > inserts a handshake prompt into the model input. Real DNS has no such TXT. When the
@@ -88,20 +98,21 @@ coverage also backfills history beyond the 5-year corpus window.
   After import, semantic queries by product/vuln-type hit them through the same poc/**
   index glob. Imported content stays local; check the source repo's license before
   redistributing.
-4. **Custom persistence-C2 handoff (long-term retention)** — the built-in Beacon has no
-   target-side persistence; this fork adds a handoff chain to **any persistence C2 you deploy
-   yourself**: a human builds/hosts the agent, saves a target-reachable download URL in the
-   settings page; CS delivers once via the online Beacon, verifies check-in by
-   "hostname + newly-appeared", records it on the blackboard and then stops using that
-   channel. **Integrating your own C2** (the controller runs wherever you deployed it; CS
-   talks HTTP only and never builds agents) requires exactly three endpoints:
-   `POST /login` (form username/password → session cookie), `POST /api/agents/refresh`
-   (channel scan; 4xx ignorable), and `GET /api/agents` (agent-list JSON with
-   hostname/username/os/id/agent_uuid/channel/last_seen/last_reply_ago). Two read-only
-   MCP tools (`persistence_c2_handoff_source`, `persistence_c2_list_agents` with auto
-   re-login) plus a dedicated settings section (credentials write-only), a read-only echo
-   on the sessions page, and the `handoff-persistence-c2` skill (which also forbids using
-   the built-in `c2_task persist` as long-term retention).
+4. **GITHUB-C2 / custom persistence-C2 handoff (long-term retention)** — recommended
+   controller (now public): **[Kxiandaoyan/github-C2](https://github.com/Kxiandaoyan/github-C2)**.
+   Deploy it yourself; CS does not embed, start, or build agents — HTTP handoff only.
+   The built-in Beacon has no target-side persistence. Flow: a human builds/hosts the
+   agent on github-C2, saves a target-reachable download URL in CS settings; CS delivers
+   once via the online Beacon, verifies check-in by "hostname + newly-appeared", records
+   it on the blackboard and then stops using that channel. **HTTP contract** (implemented
+   by github-C2; any compatible controller works): `POST /login` (form username/password →
+   session cookie), `POST /api/agents/refresh` (channel scan; 4xx ignorable), and
+   `GET /api/agents` (agent-list JSON with hostname/username/os/id/agent_uuid/channel/
+   last_seen/last_reply_ago). Two read-only MCP tools (`persistence_c2_handoff_source`,
+   `persistence_c2_list_agents` with auto re-login) plus a dedicated settings section
+   (credentials write-only), a read-only echo on the sessions page, and the
+   `handoff-persistence-c2` skill (which also forbids using the built-in `c2_task persist`
+   as long-term retention).
 5. **Experience distillation (closeout → human review → library)** — project/batch completion
    auto-generates redacted LLM drafts from blackboard facts (independent cheap model, IPv4
    redaction, min-facts gate, 24h dedup); **humans approve them on the「经验草稿」(drafts)

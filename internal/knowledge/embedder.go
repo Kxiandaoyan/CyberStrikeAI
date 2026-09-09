@@ -70,12 +70,16 @@ func NewEmbedder(ctx context.Context, cfg *config.KnowledgeConfig, openAIConfig 
 		baseURL = "https://api.openai.com/v1"
 	}
 
-	apiKey := strings.TrimSpace(cfg.Embedding.APIKey)
-	if apiKey == "" && openAIConfig != nil {
-		apiKey = strings.TrimSpace(openAIConfig.APIKey)
+	fallback := ""
+	if openAIConfig != nil {
+		fallback = openAIConfig.APIKey
 	}
+	apiKey := EffectiveEmbeddingAPIKey(cfg.Embedding.APIKey, fallback)
 	if apiKey == "" {
-		return nil, fmt.Errorf("embedding API key 未配置")
+		if logger != nil {
+			logger.Warn("嵌入 API Key 未配置或仍是占位符（如 sk-xxxxxxx），知识库可浏览但索引/检索会失败；请填写与 embedding.base_url 匹配的真实 Key")
+		}
+		apiKey = "unset"
 	}
 
 	timeout := 120 * time.Second

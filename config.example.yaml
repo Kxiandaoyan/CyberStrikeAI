@@ -414,7 +414,8 @@ experience:
     base_url: ""         # 留空则使用主 OpenAI 配置的 base_url
     model: ""            # 留空则使用主 OpenAI 配置的 model
 # 自定义维权 C2 交接（人编包+人保存下载地址，CS 只投递+验上线）
-# 对接你自己的维权 C2：控制器由你自行部署运行，CS 只经 HTTP 对接。控制器需提供：
+# 推荐公开控制器：https://github.com/Kxiandaoyan/github-C2 （自行部署，CS 不内嵌、不代启动）
+# 对接 github-C2 或任何满足同一契约的控制器：CS 只经 HTTP 对接。控制器需提供：
 #   POST /login 表单登录（username/password，成功种 session cookie）
 #   POST /api/agents/refresh 触发信道扫描   GET /api/agents 返回 agent 列表 JSON
 #   （列表字段含 hostname/username/os/id/agent_uuid/channel/last_seen/last_reply_ago）
@@ -443,7 +444,7 @@ knowledge:
     provider: openai # 嵌入模型提供商（目前仅支持openai）
     model: text-embedding-v4 # 嵌入模型名称
     base_url: https://dashscope.aliyuncs.com/compatible-mode/v1 # 留空则使用OpenAI配置的base_url
-    api_key: sk-xxxxxxx # 留空则使用OpenAI配置的api_key
+    api_key: "" # 留空则使用主 AI 通道的 api_key；勿填 sk-xxxxxxx。Base URL 是 DashScope 时必须是阿里云百炼 Key
   retrieval:
     top_k: 5 # 检索返回的Top-K结果数量
     similarity_threshold: 0.4 # 余弦相似度阈值（0-1），低于此值的结果将被过滤

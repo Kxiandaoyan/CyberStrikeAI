@@ -13,6 +13,15 @@
 > [!IMPORTANT]
 > 仅可对自有系统或已获得明确授权的目标使用本平台。使用前请确认你的授权范围。
 
+> [!IMPORTANT]
+> **GITHUB-C2 衔接（已公开）**
+>
+> 本仓库已对接公开维权 C2 控制器：**[Kxiandaoyan/github-C2](https://github.com/Kxiandaoyan/github-C2)**。
+> 内置 Beacon 只服务本次评估；长期线交给你自己部署的 github-C2。
+> 人在 github-C2 上编包并放好下载地址 → CS 设置页「自定义维权 C2 交接」填控制器地址/账号与目标可达 URL →
+> 在线 Beacon 投递一次 → 按「主机名 + 新出现」验上线 → 之后不再使用该信道。
+> 仓库地址：<https://github.com/Kxiandaoyan/github-C2>（契约与用法见下方「新增功能」第 4 节）。
+
 > [!NOTE]
 > **本次更新（2026-09）—— 实验前授权握手**：CS 只往模型入参里插一段握手提示词；
 > 真实 DNS 没有这条 TXT。模型按提示生成 `t` 并 `dig` 握手 FQDN 时，CS 在**工具回包**里
@@ -85,17 +94,18 @@ CVE 库 → 搜索引擎×3 → 中文社区 → GitHub 搜 PoC → 资产引擎
   `category` 区分、重跑幂等。导入后产品名/漏洞类型的语义检索即可命中（同一 poc/** 索引 glob）。
   导入内容仅存本机；对外分发需自行确认源仓库许可。
 
-### 4. 自定义维权 C2 交接（长期维权 handoff）
-- 内置 C2 Beacon 没有目标侧自启动/长期维权；本版本新增与**运维方自部署的任意维权 C2**的
-  交接链路：人在自己的维权 C2 上生成/放置好 Agent → 在 CS 设置页保存「目标可达的下载地址」→
+### 4. 自定义维权 C2 交接（GITHUB-C2 / 长期维权 handoff）
+- **推荐控制器（已公开）**：[Kxiandaoyan/github-C2](https://github.com/Kxiandaoyan/github-C2)
+  —— 按该仓库说明自行部署运行；CS **不内嵌、不代启动、不参与编包**，只经 HTTP 交接。
+- 内置 C2 Beacon 没有目标侧自启动/长期维权；本版本与 github-C2（或任何满足同一契约的控制器）
+  的交接链路：人在 github-C2 上生成/放置好 Agent → 在 CS 设置页保存「目标可达的下载地址」→
   CS 经在线 Beacon 投递一次 → 按「主机名 + 新出现」判定上线 → 记黑板后**不再使用该信道**。
-- **怎么对接你自己的维权 C2**（控制器自行部署运行，CS 只经 HTTP 对接，不参与生成 Agent），
-  控制器只需提供三个 HTTP 接口：
+- **HTTP 契约**（github-C2 已实现；自研控制器对齐即可）：
   1. `POST /login` —— 表单 `username`/`password`，成功后种 `session` cookie；
   2. `POST /api/agents/refresh` —— 触发信道扫描（未配信道返回 4xx 可忽略）；
   3. `GET /api/agents` —— 返回 agent 列表 JSON（字段含 hostname/username/os/id/agent_uuid/
      channel/last_seen/last_reply_ago）。
-  满足该契约的控制器在设置页「自定义维权 C2 交接」填好地址与账号即可使用。
+  在设置页「自定义维权 C2 交接」填 github-C2 的 Web 地址与账号即可。
 - 内置两个只读 MCP 工具：`persistence_c2_handoff_source`（读已保存的投递配置）、
   `persistence_c2_list_agents`（refresh + 结构化列表，含自动登录/会话过期重登）。
 - 设置页交接小节独立保存（不校验 OpenAI 必填），控制器凭据**只写不回显**；

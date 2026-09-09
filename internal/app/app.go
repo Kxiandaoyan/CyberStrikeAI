@@ -280,7 +280,7 @@ func New(cfg *config.Config, log *logger.Logger, configPath string) (*App, error
 
 		// 创建嵌入器
 		// 使用OpenAI配置的API Key（如果知识库配置中没有指定）
-		if cfg.Knowledge.Embedding.APIKey == "" {
+		if knowledge.IsPlaceholderAPIKey(cfg.Knowledge.Embedding.APIKey) {
 			cfg.Knowledge.Embedding.APIKey = cfg.OpenAI.APIKey
 		}
 		if cfg.Knowledge.Embedding.BaseURL == "" {
@@ -315,6 +315,10 @@ func New(cfg *config.Config, log *logger.Logger, configPath string) (*App, error
 
 		// 扫描知识库并建立索引（异步）
 		go func() {
+			if knowledge.EffectiveEmbeddingAPIKey(cfg.Knowledge.Embedding.APIKey, cfg.OpenAI.APIKey) == "" {
+				log.Logger.Warn("跳过自动构建知识库索引：嵌入 API Key 未配置或仍是占位符，请在知识库设置填写与 Base URL 匹配的真实 Key")
+				return
+			}
 			itemsToIndex, err := knowledgeManager.ScanKnowledgeBase()
 			if err != nil {
 				log.Logger.Warn("扫描知识库失败", zap.Error(err))
@@ -342,6 +346,10 @@ func New(cfg *config.Config, log *logger.Logger, configPath string) (*App, error
 						if err := knowledgeIndexer.IndexItem(ctx, itemID); err != nil {
 							failedCount++
 							consecutiveFailures++
+							if knowledge.IsEmbedAuthError(err) {
+								log.Logger.Error("嵌入鉴权失败，停止增量索引", zap.String("itemId", itemID), zap.Error(err))
+								break
+							}
 
 							if consecutiveFailures == 1 {
 								firstFailureItemID = itemID
