@@ -1871,6 +1871,18 @@ async function applySettings() {
             input.classList.remove('error');
         });
         
+        // 知识库页点「应用」时，基本设置表单可能还是空的；先用已保存通道补齐，避免拦下知识库开关。
+        try {
+            const ai = ensureAIConfigShape(currentConfig || {});
+            const ch = ai.channels[selectedAIChannelId] || ai.channels[ai.default_channel] || {};
+            const keyEl = document.getElementById('openai-api-key');
+            const urlEl = document.getElementById('openai-base-url');
+            const modelEl = document.getElementById('openai-model');
+            if (keyEl && !keyEl.value.trim() && ch.api_key) keyEl.value = ch.api_key;
+            if (urlEl && !urlEl.value.trim() && ch.base_url) urlEl.value = ch.base_url;
+            if (modelEl && !modelEl.value.trim() && ch.model) modelEl.value = ch.model;
+        } catch (e) { /* ignore */ }
+
         // 验证必填字段
         const provider = document.getElementById('openai-provider')?.value || 'openai';
         const apiKey = document.getElementById('openai-api-key').value.trim();
@@ -1925,7 +1937,7 @@ async function applySettings() {
                 provider: document.getElementById('knowledge-embedding-provider')?.value || 'openai',
                 model: document.getElementById('knowledge-embedding-model')?.value.trim() || '',
                 base_url: document.getElementById('knowledge-embedding-base-url')?.value.trim() || '',
-                api_key: document.getElementById('knowledge-embedding-api-key')?.value.trim() || ''
+                api_key: document.getElementById('knowledge-embedding-api-key')?.value.trim() || currentConfig?.knowledge?.embedding?.api_key || ''
             },
             retrieval: {
                 top_k: parseInt(document.getElementById('knowledge-retrieval-top-k')?.value) || 5,

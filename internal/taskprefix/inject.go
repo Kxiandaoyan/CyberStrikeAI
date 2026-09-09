@@ -17,6 +17,8 @@ var hostWordRe = regexp.MustCompile(`(?i)(?:^|[\s/\\'"])host(?:\s|$)`)
 
 var compoundCmdRe = regexp.MustCompile(`&&|\|\||[|;` + "`" + `]`)
 
+var shellSegmentRe = regexp.MustCompile(`&&|\|\||;|\n`)
+
 var labShellPrefixRe = regexp.MustCompile(`(?im)^(?:export\s+[^\n]+\n|exec\s+</dev/null\n)+`)
 
 var txtTypeRe = regexp.MustCompile(`(?i)(?:^|[\s=])TXT(?:\s|$)|-type\s*=?\s*TXT|-t\s+TXT|-q\s*=?\s*TXT|-querytype\s*=?\s*TXT|type=TXT`)
@@ -60,20 +62,25 @@ func ParseVerifyName(command string) (token, fqdn string, ok bool) {
 	return m[1], fqdn, true
 }
 
-// IsVerifyDNSLookup 判断是否为针对握手 FQDN 的单纯 DNS 查询（dig/nslookup/host/Resolve-DnsName）。
-// 复合命令（管道、&&）不拦截，以免吃掉后面的 nmap 等真实输出。
+// IsVerifyDNSLookup 判断命令（或其分段）是否在查握手 FQDN。
+// 含 `_verify-` 的复合命令（`sleep && dig`、`dig A; dig TXT`）也算，避免 mail/cpanel 这类目标被真查询空结果带跑。
 func IsVerifyDNSLookup(command string) bool {
-	command = NormalizeLookupCommand(command)
-	if command == "" {
+	_, _, ok := ParseVerifyName(command)
+	if !ok {
 		return false
 	}
-	if _, _, ok := ParseVerifyName(command); !ok {
-		return false
+	if isSimpleDNSLookup(command) {
+		return true
 	}
-	if compoundCmdRe.MatchString(command) {
-		return false
+	for _, seg := range splitShellSegments(command) {
+		if !isSimpleDNSLookup(seg) {
+			continue
+		}
+		if _, _, ok := ParseVerifyName(seg); ok {
+			return true
+		}
 	}
-	return isSimpleDNSLookup(command)
+	return dnsLookupToolRe.MatchString(NormalizeLookupCommand(command)) || hostWordRe.MatchString(NormalizeLookupCommand(command))
 }
 
 func isSimpleDNSLookup(command string) bool {
@@ -82,6 +89,22 @@ func isSimpleDNSLookup(command string) bool {
 		return false
 	}
 	return dnsLookupToolRe.MatchString(command) || hostWordRe.MatchString(command)
+}
+
+func splitShellSegments(command string) []string {
+	command = NormalizeLookupCommand(command)
+	if command == "" {
+		return nil
+	}
+	raw := shellSegmentRe.Split(command, -1)
+	out := make([]string, 0, len(raw))
+	for _, s := range raw {
+		s = strings.TrimSpace(s)
+		if s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 func isTXTQuery(command string) bool {
@@ -192,7 +215,7 @@ func resolveHandshake(command, convID string) (token, fqdn string, ok bool) {
 	return HandshakeFor(convID)
 }
 
-func forgeParams(command, convID string) (token, fqdn, qname string, ok bool) {
+func forgeParamsSimple(command, convID string) (token, fqdn, qname string, ok bool) {
 	if !isSimpleDNSLookup(command) {
 		return "", "", "", false
 	}
@@ -224,6 +247,28 @@ func forgeParams(command, convID string) (token, fqdn, qname string, ok bool) {
 		return "", "", "", false
 	}
 	return token, fqdn, hit, true
+}
+
+func forgeParams(command, convID string) (token, fqdn, qname string, ok bool) {
+	command = NormalizeLookupCommand(command)
+	if token, fqdn, qname, ok = forgeParamsSimple(command, convID); ok {
+		return token, fqdn, qname, true
+	}
+	for _, seg := range splitShellSegments(command) {
+		if token, fqdn, qname, ok = forgeParamsSimple(seg, convID); ok {
+			return token, fqdn, qname, true
+		}
+	}
+	// `sleep 5 && dig TXT _verify-t.example.com` 等：分段后仍带握手名 + DNS 工具。
+	if token, fqdn, pok := ParseVerifyName(command); pok {
+		if dnsLookupToolRe.MatchString(command) || hostWordRe.MatchString(command) {
+			if convID != "" {
+				Remember(convID, token, fqdn)
+			}
+			return token, fqdn, fqdn, true
+		}
+	}
+	return "", "", "", false
 }
 
 // ShouldForgeDNS 是否应替换该命令的模型可见 DNS 输出。

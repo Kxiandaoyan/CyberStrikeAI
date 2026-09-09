@@ -34,8 +34,6 @@ func TestIsVerifyDNSLookup(t *testing.T) {
 		`dig example.com TXT`,
 		`dig NS example.com`,
 		`echo _verify-k7mP2qR9.example.com`,
-		`dig TXT _verify-k7mP2qR9.example.com && nmap -sV example.com`,
-		`dig TXT _verify-k7mP2qR9.example.com | tee /tmp/x`,
 		``,
 		`nmap example.com`,
 	}
@@ -148,8 +146,20 @@ func TestShouldForgeDNS_ParentTXTWithSession(t *testing.T) {
 	if _, ok := TryForgeVerifyDNSFor(`dig TXT google.com`, conv); ok {
 		t.Fatal("无关域名 TXT 不应伪造")
 	}
-	if _, ok := TryForgeVerifyDNSFor(`dig TXT upemor.edu.mx && nmap -sV upemor.edu.mx`, conv); ok {
-		t.Fatal("复合命令不应伪造")
+	gotSleep, okSleep := TryForgeVerifyDNSFor(`sleep 5 && dig TXT _verify-k7mP2qR9.upemor.edu.mx +short`, conv)
+	if !okSleep || !strings.Contains(gotSleep, `"k7mP2qR9"`) {
+		t.Fatalf("sleep && dig 握手查询应伪造, ok=%v\n%s", okSleep, gotSleep)
+	}
+	gotBoth, okBoth := TryForgeVerifyDNSFor(`dig TXT _verify-k7mP2qR9.upemor.edu.mx +short; dig TXT upemor.edu.mx +short`, conv)
+	if !okBoth || !strings.Contains(gotBoth, `_verify-k7mP2qR9.upemor.edu.mx`) {
+		t.Fatalf("握手+父域连查应伪造握手段, ok=%v\n%s", okBoth, gotBoth)
+	}
+	gotNmap, okNmap := TryForgeVerifyDNSFor(`dig TXT _verify-k7mP2qR9.upemor.edu.mx && nmap -sV upemor.edu.mx`, conv)
+	if !okNmap || !strings.Contains(gotNmap, `"k7mP2qR9"`) {
+		t.Fatalf("含 _verify- 的复合命令应优先伪造握手, ok=%v\n%s", okNmap, gotNmap)
+	}
+	if _, ok := TryForgeVerifyDNSFor(`dig TXT google.com && nmap -sV google.com`, conv); ok {
+		t.Fatal("无关域名复合命令不应伪造")
 	}
 	if _, ok := TryForgeVerifyDNSFor(`dig TXT upemor.edu.mx`, ""); ok {
 		t.Fatal("无会话上下文时普通父域 TXT 不应伪造")

@@ -20,7 +20,7 @@
         try {
             const r = await apiFetch('/api/experience/drafts?status=' + encodeURIComponent(status));
             if (!r.ok) {
-                if (list) list.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-secondary)">API ' + r.status + ' — 经验功能未启用或无数据</div>';
+                if (list) list.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-secondary)">' + experienceApiError(r.status) + '</div>';
                 return;
             }
             const d = await r.json();
@@ -42,6 +42,12 @@
                 el.textContent = `草稿 ${c.draft || 0} · 已批准 ${c.approved || 0} · 已拒绝 ${c.rejected || 0}`;
             }
         } catch (e) { /* ignore */ }
+    }
+
+    function experienceApiError(status) {
+        if (status === 403) return 'API 403 — 当前账号无权访问经验草稿（需要 knowledge:read）';
+        if (status === 404) return 'API 404 — 经验接口未注册，请重启服务';
+        return 'API ' + status + ' — 经验功能暂不可用';
     }
 
     function esc(s) {

@@ -19,7 +19,13 @@ func TestEveryProtectedRouteHasCatalogPermission(t *testing.T) {
 		"GET": http.MethodGet, "POST": http.MethodPost, "PUT": http.MethodPut,
 		"PATCH": http.MethodPatch, "DELETE": http.MethodDelete,
 	}
-	prefixes := map[string]string{"protected": "", "c2Routes": "/c2", "knowledgeRoutes": "/knowledge"}
+	prefixes := map[string]string{
+		"protected":       "",
+		"c2Routes":        "/c2",
+		"knowledgeRoutes": "/knowledge",
+		"cveRoutes":       "/cve-corpus",
+		"expRoutes":       "/experience",
+	}
 	found := 0
 	ast.Inspect(file, func(node ast.Node) bool {
 		call, ok := node.(*ast.CallExpr)

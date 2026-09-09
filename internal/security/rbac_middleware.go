@@ -149,6 +149,15 @@ func permissionForRequest(method, fullPath string) string {
 			return "knowledge:read"
 		}
 		return crudPermission(method, "knowledge")
+	case strings.HasPrefix(path, "/cve-corpus"):
+		// 检索/详情与知识库只读同权；手动同步仍走配置写（管理员）。
+		if method == http.MethodPost {
+			return "config:write"
+		}
+		return "knowledge:read"
+	case strings.HasPrefix(path, "/experience"):
+		// 草稿列表只读；批准/拒绝会写入 Skill 或知识库，与 knowledge 写同权。
+		return crudPermission(method, "knowledge")
 	case strings.HasPrefix(path, "/vulnerabilities"):
 		return crudPermission(method, "vulnerability")
 	case path == "/assets/batch-delete", path == "/assets/merge":
@@ -274,6 +283,10 @@ func isProcessGlobalMutationPath(path string) bool {
 	}
 	if strings.HasPrefix(path, "/knowledge") {
 		return path != "/knowledge/search"
+	}
+	if strings.HasPrefix(path, "/experience") {
+		// 批准落盘写的是进程级 Skill/知识库，不能靠 assigned 范围绕过。
+		return true
 	}
 	if strings.HasPrefix(path, "/eino-agent/markdown-agents") || strings.HasPrefix(path, "/multi-agent/markdown-agents") {
 		return true

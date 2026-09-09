@@ -54,8 +54,8 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 
-# Go
-vendor/
+# Go modules vendor (repo root only; do not ignore web/static/vendor)
+/vendor/
 
 # Node / browser extension
 node_modules/

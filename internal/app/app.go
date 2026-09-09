@@ -1199,35 +1199,34 @@ func setupRoutes(
 		protected.GET("/attack-chain/:conversationId", attackChainHandler.GetAttackChain)
 		protected.POST("/attack-chain/:conversationId/regenerate", attackChainHandler.RegenerateAttackChain)
 
-		// CVE 语料检索（本地近 5 年 CVE Markdown）
-		if app.config.CVECorpus.Enabled || app.config.ZvecGrep.Enabled {
-			cveH := handler.NewCveCorpusHandler(app.corpusDirAbs, app.logger.Logger.Sugar())
-			if app.cveSyncCfg != nil {
-				syncCfgCopy := *app.cveSyncCfg
-				sugar := app.logger.Logger.Sugar()
-				cveH.SetSyncTrigger(func(full bool) error {
-					return cvesync.RunOnce(context.Background(), syncCfgCopy, sugar, full)
-				})
-				auditRef := app.auditSvc
-				cveH.SetOnSyncStart(func(c *gin.Context, full bool) {
-					if auditRef != nil {
-						auditRef.Record(c, audit.Entry{
-							Category: "cve_corpus", Action: "sync", Result: "success",
-							Message: "手动 CVE 同步已触发", Detail: map[string]interface{}{"full": full},
-						})
-					}
-				})
-			}
-			cveRoutes := protected.Group("/cve-corpus")
-			{
-				cveRoutes.GET("/search", cveH.Search)
-				cveRoutes.GET("/state", cveH.State)
-				cveRoutes.GET("/:id", cveH.GetDetail)
-				// 手动同步（管理员；异步执行，审计记录触发）
-				cveRoutes.POST("/sync", security.RequirePermission("config:write"), cveH.Sync)
-			}
-			app.logger.Info("CVE corpus search API registered", zap.String("dir", app.corpusDirAbs))
+		// CVE 语料检索（本地近 5 年 CVE Markdown）。路由常驻：检索页不依赖
+		// 每日同步开关；无语料时接口返回空列表。同步触发器仅在 enabled 时注入。
+		cveH := handler.NewCveCorpusHandler(app.corpusDirAbs, app.logger.Logger.Sugar())
+		if app.cveSyncCfg != nil {
+			syncCfgCopy := *app.cveSyncCfg
+			sugar := app.logger.Logger.Sugar()
+			cveH.SetSyncTrigger(func(full bool) error {
+				return cvesync.RunOnce(context.Background(), syncCfgCopy, sugar, full)
+			})
+			auditRef := app.auditSvc
+			cveH.SetOnSyncStart(func(c *gin.Context, full bool) {
+				if auditRef != nil {
+					auditRef.Record(c, audit.Entry{
+						Category: "cve_corpus", Action: "sync", Result: "success",
+						Message: "手动 CVE 同步已触发", Detail: map[string]interface{}{"full": full},
+					})
+				}
+			})
 		}
+		cveRoutes := protected.Group("/cve-corpus")
+		{
+			cveRoutes.GET("/search", cveH.Search)
+			cveRoutes.GET("/state", cveH.State)
+			cveRoutes.GET("/:id", cveH.GetDetail)
+			// 手动同步（管理员；异步执行，审计记录触发）
+			cveRoutes.POST("/sync", security.RequirePermission("config:write"), cveH.Sync)
+		}
+		app.logger.Info("CVE corpus search API registered", zap.String("dir", app.corpusDirAbs))
 
 		// 经验总结（草稿 + 人审）— 路由常驻，未启用时列表为空（与知识库路由一致，
 		// 避免导航页撞 API 错误）；EnsureSchema 幂等。

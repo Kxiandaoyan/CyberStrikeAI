@@ -159,6 +159,27 @@ func TestConfigToolsReadAllowsMCPReadWithoutConfigRead(t *testing.T) {
 	}
 }
 
+func TestCVECorpusAndExperienceRoutesHaveCatalogPermissions(t *testing.T) {
+	if got := permissionForRequest(http.MethodGet, "/api/cve-corpus/search"); got != "knowledge:read" {
+		t.Fatalf("cve search permission = %q, want knowledge:read", got)
+	}
+	if got := permissionForRequest(http.MethodGet, "/api/cve-corpus/state"); got != "knowledge:read" {
+		t.Fatalf("cve state permission = %q, want knowledge:read", got)
+	}
+	if got := permissionForRequest(http.MethodPost, "/api/cve-corpus/sync"); got != "config:write" {
+		t.Fatalf("cve sync permission = %q, want config:write", got)
+	}
+	if got := permissionForRequest(http.MethodGet, "/api/experience/drafts"); got != "knowledge:read" {
+		t.Fatalf("experience list permission = %q, want knowledge:read", got)
+	}
+	if got := permissionForRequest(http.MethodPost, "/api/experience/drafts/:id/approve"); got != "knowledge:write" {
+		t.Fatalf("experience approve permission = %q, want knowledge:write", got)
+	}
+	if !isProcessGlobalMutationPath("/experience/drafts/:id/approve") {
+		t.Fatal("experience approve should be a process-global mutation")
+	}
+}
+
 func TestWorkflowRunPermissionIsSeparateFromDefinitionManagement(t *testing.T) {
 	if got := permissionForRequest(http.MethodPost, "/api/workflows/runs/run-1/resume"); got != "workflow:execute" {
 		t.Fatalf("resume permission = %q, want workflow:execute", got)

@@ -203,9 +203,10 @@ cd CyberStrikeAI
 
 首次启动后：
 1. 复制/对照 `config.example.yaml` 生成 `config.yaml`（二进制首次启动也会自动从模板创建）。
-2. `zvec_grep.enabled` 默认已开（`./run.sh` 会编 CLI 并拉起 `127.0.0.1:7999`）。按需再开：
-   `cve_corpus.enabled`（每日增量同步）、`experience.enabled` + `auto_draft`（经验 + POC 草稿）、
-   `persistence_c2`（交接配置，可在网页设置页保存）。
+2. 默认已开：`zvec_grep.enabled`（`./run.sh` 会编 CLI 并拉起 `127.0.0.1:7999`）、
+   `cve_corpus.enabled`（每日增量同步；检索页不依赖此开关）、
+   `experience.enabled` + `auto_draft`（收尾自动出经验/POC 草稿，人审后入库）。
+   不想要就在 `config.yaml` 设 `false`。`persistence_c2` 仍按需配置（可在网页设置页保存）。
 3. 浏览器打开 `https://127.0.0.1:8080`（自签证书；`./run.sh --http` 用纯 HTTP），
    首次启动日志会打印管理员初始密码。
 

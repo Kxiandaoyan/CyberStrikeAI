@@ -1,12 +1,13 @@
-// 前端国际化初始化（基于 i18next 浏览器版本）
+// 前端国际化：语言包 JSON 始终加载。i18next 仅作可选增强，缺失时用内置查找，避免露出 projects.statusActive 一类 key。
 (function () {
     const DEFAULT_LANG = 'zh-CN';
     const STORAGE_KEY = 'csai_lang';
     const RESOURCES_PREFIX = '/static/i18n';
 
     const loadedLangs = {};
+    const bundles = {};
+    let currentLang = DEFAULT_LANG;
 
-    // 供 bootstrap 等逻辑等待：避免 chat 在 t() 未就绪时用中文硬编码渲染，导致与语言标签不一致
     let i18nReadyResolve;
     window.i18nReady = new Promise(function (resolve) {
         i18nReadyResolve = resolve;
@@ -32,6 +33,49 @@
         return DEFAULT_LANG;
     }
 
+    function lookup(obj, key) {
+        if (!obj || !key) return undefined;
+        const parts = String(key).split('.');
+        let cur = obj;
+        for (let i = 0; i < parts.length; i++) {
+            if (cur == null || typeof cur !== 'object' || !(parts[i] in cur)) {
+                return undefined;
+            }
+            cur = cur[parts[i]];
+        }
+        return typeof cur === 'string' ? cur : undefined;
+    }
+
+    function interpolate(str, opts) {
+        if (!opts || typeof str !== 'string') return str;
+        return str.replace(/\{\{\s*(\w+)\s*\}\}/g, function (_, name) {
+            if (opts[name] == null) return '';
+            return String(opts[name]);
+        });
+    }
+
+    function translateFromBundles(key, opts) {
+        const primary = lookup(bundles[currentLang], key);
+        if (primary) return interpolate(primary, opts);
+        if (currentLang !== DEFAULT_LANG) {
+            const fallback = lookup(bundles[DEFAULT_LANG], key);
+            if (fallback) return interpolate(fallback, opts);
+        }
+        return '';
+    }
+
+    function translate(key, opts) {
+        if (!key) return '';
+        if (typeof i18next !== 'undefined' && typeof i18next.t === 'function') {
+            const fromEngine = i18next.t(key, opts);
+            if (fromEngine && fromEngine !== key) {
+                return fromEngine;
+            }
+        }
+        const fromBundle = translateFromBundles(key, opts);
+        return fromBundle || key;
+    }
+
     async function loadLanguageResources(lang) {
         if (loadedLangs[lang]) {
             return;
@@ -45,6 +89,7 @@
                 return;
             }
             const data = await resp.json();
+            bundles[lang] = data;
             if (typeof i18next !== 'undefined') {
                 i18next.addResourceBundle(lang, 'translation', data, true, true);
             }
@@ -55,7 +100,6 @@
     }
 
     function applyTranslations(root) {
-        if (typeof i18next === 'undefined') return;
         const container = root || document;
         if (!container) return;
 
@@ -66,10 +110,8 @@
             const skipText = el.getAttribute('data-i18n-skip-text') === 'true';
             const isFormControl = (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA');
             const attrList = el.getAttribute('data-i18n-attr');
-            const translated = i18next.t(key);
-            // 缺键时保留模板中的后备文案，避免页面直接显示 assets.project 一类内部键名。
+            const translated = translate(key);
             const text = translated && translated !== key ? translated : '';
-            // 仅当元素无子元素（仅文本或空）时才替换文本，避免覆盖卡片内的数字、子节点等；input/textarea 永不设置 textContent
             const hasNoElementChildren = !el.querySelector('*');
             if (!skipText && !isFormControl && hasNoElementChildren && text && typeof text === 'string') {
                 el.textContent = text;
@@ -81,7 +123,7 @@
                     if (!attr) return;
                     var val = text;
                     if (attr === 'title' && titleKey) {
-                        var titleText = i18next.t(titleKey);
+                        var titleText = translate(titleKey);
                         if (titleText && titleText !== titleKey && typeof titleText === 'string') val = titleText;
                     }
                     if (val && typeof val === 'string') {
@@ -91,7 +133,6 @@
             }
         });
 
-        // 对话输入框：若 value 与 placeholder 相同，清空 value 以便正确显示占位提示
         try {
             const chatInput = document.getElementById('chat-input');
             if (chatInput && chatInput.tagName === 'TEXTAREA') {
@@ -102,10 +143,9 @@
             }
         } catch (e) { /* ignore */ }
 
-        // 更新 html lang 属性
         try {
             if (document && document.documentElement) {
-                document.documentElement.lang = i18next.language || DEFAULT_LANG;
+                document.documentElement.lang = currentLang || DEFAULT_LANG;
             }
         } catch (e) {
             // ignore
@@ -114,12 +154,12 @@
 
     function updateLangLabel() {
         const label = document.getElementById('current-lang-label');
-        if (!label || typeof i18next === 'undefined') return;
-        const lang = (i18next.language || DEFAULT_LANG).toLowerCase();
+        if (!label) return;
+        const lang = (currentLang || DEFAULT_LANG).toLowerCase();
         if (lang.indexOf('zh') === 0) {
-            label.textContent = i18next.t('lang.zhCN');
+            label.textContent = translate('lang.zhCN');
         } else {
-            label.textContent = i18next.t('lang.enUS');
+            label.textContent = translate('lang.enUS');
         }
     }
 
@@ -144,11 +184,15 @@
     }
 
     async function changeLanguage(lang) {
-        if (typeof i18next === 'undefined') return;
-        const current = i18next.language || DEFAULT_LANG;
-        if (lang === current) return;
+        if (lang === currentLang && loadedLangs[lang]) return;
         await loadLanguageResources(lang);
-        await i18next.changeLanguage(lang);
+        if (lang !== DEFAULT_LANG) {
+            await loadLanguageResources(DEFAULT_LANG);
+        }
+        currentLang = lang;
+        if (typeof i18next !== 'undefined' && typeof i18next.t === 'function') {
+            await i18next.changeLanguage(lang);
+        }
         try {
             localStorage.setItem(STORAGE_KEY, lang);
         } catch (e) {
@@ -167,40 +211,10 @@
         } catch (e) { /* ignore */ }
     }
 
-    async function initI18n() {
-        if (typeof i18next === 'undefined') {
-            console.warn('i18next 未加载，跳过前端国际化初始化');
-            if (typeof i18nReadyResolve === 'function') i18nReadyResolve();
-            return;
-        }
-
-        const initialLang = detectInitialLang();
-        await i18next.init({
-            lng: initialLang,
-            fallbackLng: DEFAULT_LANG,
-            debug: false,
-            resources: {}
-        });
-
-        await loadLanguageResources(initialLang);
-        applyTranslations(document);
-        updateLangLabel();
-        if (typeof window.refreshThemeToggleLabel === 'function') {
-            window.refreshThemeToggleLabel();
-        }
-        try {
-            window.__locale = i18next.language || initialLang;
-        } catch (e) { /* ignore */ }
-
-        // 导出全局函数供其他脚本调用（支持插值参数，如 _t('key', { count: 2 })）
-        window.t = function (key, opts) {
-            if (typeof i18next === 'undefined') return key;
-            return i18next.t(key, opts);
-        };
+    function exportGlobals() {
+        window.t = translate;
         window.changeLanguage = changeLanguage;
         window.applyTranslations = applyTranslations;
-
-        // 语言切换下拉支持
         window.toggleLangDropdown = function () {
             const dropdown = document.getElementById('lang-dropdown');
             if (!dropdown) return;
@@ -214,10 +228,39 @@
             changeLanguage(lang);
             closeLangDropdown();
         };
+    }
+
+    async function initI18n() {
+        exportGlobals();
+        const initialLang = detectInitialLang();
+        currentLang = initialLang;
+
+        if (typeof i18next !== 'undefined') {
+            await i18next.init({
+                lng: initialLang,
+                fallbackLng: DEFAULT_LANG,
+                debug: false,
+                resources: {},
+                // 文案用 {{count}} 插值，不要按复数后缀去找 statsFacts_other
+                compatibilityJSON: 'v3'
+            });
+        }
+
+        await loadLanguageResources(initialLang);
+        if (initialLang !== DEFAULT_LANG) {
+            await loadLanguageResources(DEFAULT_LANG);
+        }
+        applyTranslations(document);
+        updateLangLabel();
+        if (typeof window.refreshThemeToggleLabel === 'function') {
+            window.refreshThemeToggleLabel();
+        }
+        try {
+            window.__locale = currentLang;
+        } catch (e) { /* ignore */ }
 
         document.addEventListener('click', handleGlobalClickForLangDropdown);
 
-        // 若 chat 已在 i18n 完成前用后备中文渲染了系统就绪消息，这里按当前语言纠正一次
         try {
             if (typeof refreshSystemReadyMessageBubbles === 'function') {
                 refreshSystemReadyMessageBubbles();
@@ -227,10 +270,12 @@
         if (typeof i18nReadyResolve === 'function') i18nReadyResolve();
     }
 
+    exportGlobals();
+
     document.addEventListener('DOMContentLoaded', function () {
-        // i18n 初始化在 DOM Ready 后执行
         initI18n().catch(function (e) {
             console.error('初始化国际化失败:', e);
+            exportGlobals();
             if (typeof i18nReadyResolve === 'function') i18nReadyResolve();
         });
     });

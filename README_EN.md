@@ -201,7 +201,9 @@ built and zvec-server is started. Skip the sidecar with `SKIP_ZVEC_SERVER=1 ./ru
 Skip Node auto-install with `SKIP_NODE_INSTALL=1 ./run.sh`.
 Open `https://127.0.0.1:8080` (self-signed; `./run.sh --http` for plain HTTP); the bootstrap
 admin password is printed on first start. Other optional flags in `config.yaml`:
-`cve_corpus.enabled`, `experience.enabled`, `persistence_c2.*`. (`zvec_grep.enabled` defaults to true.)
+`cve_corpus.enabled` (daily sync; the search page does not depend on it),
+`experience.enabled` + `auto_draft` (drafts on close-out), and `zvec_grep.enabled`
+all default to true. Set any of them `false` to opt out. `persistence_c2.*` is still opt-in.
 
 ### CVE corpus data (extract it yourself)
 

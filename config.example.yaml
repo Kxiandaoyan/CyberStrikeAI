@@ -389,7 +389,7 @@ zvec_grep:
 # CVE 语料同步（每日增量：GitHub commits+compare 纯 HTTP 增量 → 短 Markdown；
 # 失败只写 last_error 不推进水位线；增量索引由 zvec 检索时 autoUpdate 维护）
 cve_corpus:
-  enabled: false        # 设 true 启用每日同步（本地 3 点 + 启动 36h 补跑）
+  enabled: true         # 默认开启：每日增量同步（本地 3 点 + 启动 36h 补跑）。检索页不依赖本开关；关同步设 false
   mode: git             # git | daily_zip（git 被墙时改 zip）
   remote: https://github.com/CVEProject/cvelistV5.git
   years: 5               # 保留最近 N 年（当前 UTC 年往前推）
@@ -400,8 +400,8 @@ cve_corpus:
   desc_max_runes: 2000   # 描述截断长度
 # 经验总结（收尾自动生成草稿，人审后入库）
 experience:
-  enabled: false
-  auto_draft: false        # 设 true 在项目/队列完成时自动生成经验草稿
+  enabled: true            # 默认开启：经验草稿功能（列表页常驻；关功能设 false）
+  auto_draft: true         # 默认开启：项目/队列完成时自动生成经验草稿
   poc_auto_apply: true     # 实战 POC 免审批：confirmed 且带 CVE 编号的漏洞在收尾时
                            # 自动写入本地实战库 data/corpus/poc/（IPv4 脱敏、仅存本机、
                            # 同步不覆盖、不出公开仓库）。设 false 则 POC 也进人工批准队列。
@@ -437,7 +437,7 @@ c2:
 # 知识库相关配置
 # ============================================
 knowledge:
-  enabled: false # 是否启用知识检索功能
+  enabled: true # 默认开启知识检索；关闭后侧栏知识库页会提示未启用
   base_path: knowledge_base # 知识库目录路径（相对于配置文件所在目录）
   embedding:
     provider: openai # 嵌入模型提供商（目前仅支持openai）

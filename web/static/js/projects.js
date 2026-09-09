@@ -624,6 +624,9 @@ function initProjectsModalEscape() {
 async function initProjectsPage() {
     const page = document.getElementById('page-projects');
     if (!page || page.style.display === 'none') return;
+    if (window.i18nReady) {
+        try { await window.i18nReady; } catch (e) { /* ignore */ }
+    }
     initProjectsModalEscape();
     refreshProjectsFilterSelects();
     if (typeof syncAppModalBodyLock === 'function') {
@@ -728,13 +731,13 @@ function formatConfidenceBadge(confidence) {
 function renderProjectFactActions(keyEsc, idEsc, confidence) {
     const isDeprecated = (confidence || '').toLowerCase() === 'deprecated';
     const toggleBtn = isDeprecated
-        ? `<button type="button" class="projects-action-btn projects-action-btn--restore" data-fact-key="${keyEsc}" onclick="restoreProjectFactByKey(this.dataset.factKey)" title="${escapeHtml(tp('projects.restoreTitle'))}">${escapeHtml(tp('projects.restore'))}</button>`
-        : `<button type="button" class="projects-action-btn projects-action-btn--mute" data-fact-key="${keyEsc}" onclick="deprecateProjectFactByKey(this.dataset.factKey)" title="${escapeHtml(tp('projects.deprecateTitle'))}">${escapeHtml(tp('projects.deprecate'))}</button>`;
+        ? `<button type="button" class="projects-action-btn projects-action-btn--restore" data-fact-key="${keyEsc}" onclick="restoreProjectFactByKey(this.dataset.factKey)" title="${escapeHtml(tpFmt('projects.restoreTitle', '恢复为待确认并重新进入黑板索引'))}">${escapeHtml(tpFmt('projects.restore', '恢复'))}</button>`
+        : `<button type="button" class="projects-action-btn projects-action-btn--mute" data-fact-key="${keyEsc}" onclick="deprecateProjectFactByKey(this.dataset.factKey)" title="${escapeHtml(tpFmt('projects.deprecateTitle', '标记为已废弃'))}">${escapeHtml(tpFmt('projects.deprecate', '废弃'))}</button>`;
     return `<div class="projects-table-actions">
-        <button type="button" class="projects-action-btn projects-action-btn--edit" data-fact-key="${keyEsc}" onclick="showEditFactModal(this.dataset.factKey)" title="${escapeHtml(tp('projects.editTitle'))}">${escapeHtml(tp('common.edit'))}</button>
-        <button type="button" class="projects-action-btn projects-action-btn--view" data-fact-key="${keyEsc}" onclick="viewProjectFactBody(this.dataset.factKey)" title="${escapeHtml(tp('projects.viewBodyTitle'))}">${escapeHtml(tp('projects.details'))}</button>
+        <button type="button" class="projects-action-btn projects-action-btn--edit" data-fact-key="${keyEsc}" onclick="showEditFactModal(this.dataset.factKey)" title="${escapeHtml(tpFmt('projects.editTitle', '编辑各字段'))}">${escapeHtml(tpFmt('common.edit', '编辑'))}</button>
+        <button type="button" class="projects-action-btn projects-action-btn--view" data-fact-key="${keyEsc}" onclick="viewProjectFactBody(this.dataset.factKey)" title="${escapeHtml(tpFmt('projects.viewBodyTitle', '查看完整 body'))}">${escapeHtml(tpFmt('projects.details', '详情'))}</button>
         ${toggleBtn}
-        <button type="button" class="projects-action-btn projects-action-btn--danger" data-fact-id="${idEsc}" onclick="deleteProjectFact(this.dataset.factId)" title="${escapeHtml(tp('projects.deleteForeverTitle'))}">${escapeHtml(tp('common.delete'))}</button>
+        <button type="button" class="projects-action-btn projects-action-btn--danger" data-fact-id="${idEsc}" onclick="deleteProjectFact(this.dataset.factId)" title="${escapeHtml(tpFmt('projects.deleteForeverTitle', '永久删除'))}">${escapeHtml(tpFmt('common.delete', '删除'))}</button>
     </div>`;
 }
 
@@ -943,7 +946,7 @@ function updateProjectStatusPill(status) {
     const el = document.getElementById('projects-detail-status');
     if (!el) return;
     const archived = status === 'archived';
-    el.textContent = archived ? tp('projects.statusArchived') : tp('projects.statusActive');
+    el.textContent = archived ? tpFmt('projects.statusArchived', '已归档') : tpFmt('projects.statusActive', '进行中');
     el.className = 'projects-status-pill ' + (archived ? 'projects-status-pill--archived' : 'projects-status-pill--active');
 }
 
@@ -952,7 +955,7 @@ function renderProjectDetailMeta(updatedAt) {
     const timeEl = document.getElementById('projects-detail-meta-time');
     if (!metaEl || !timeEl) return;
     const time = formatProjectTime(updatedAt);
-    const full = tpFmt('projects.updatedPrefix', `Updated ${time}`, { time });
+    const full = tpFmt('projects.updatedPrefix', `更新于 ${time}`, { time });
     timeEl.textContent = time;
     metaEl.title = full;
 }
@@ -978,13 +981,13 @@ function updateProjectStats(stats) {
     const vc = s.vuln_count ?? s.vulnCount ?? 0;
     const cc = s.conversation_count ?? s.conversationCount ?? 0;
     const sc = s.sparse_fact_count ?? s.sparseFactCount ?? 0;
-    if (f) f.textContent = tpFmt('projects.statsFacts', `${fc} facts`, { count: fc });
-    if (v) v.textContent = tpFmt('projects.statsVulns', `${vc} vulnerabilities`, { count: vc });
-    if (c) c.textContent = tpFmt('projects.statsConversations', `${cc} conversations`, { count: cc });
+    if (f) f.textContent = tpFmt('projects.statsFacts', `${fc} 条事实`, { count: fc });
+    if (v) v.textContent = tpFmt('projects.statsVulns', `${vc} 个漏洞`, { count: vc });
+    if (c) c.textContent = tpFmt('projects.statsConversations', `${cc} 个对话`, { count: cc });
     if (sparse) {
         if (sc > 0) {
             sparse.hidden = false;
-            sparse.textContent = tpFmt('projects.statsSparse', `${sc} to complete`, { count: sc });
+            sparse.textContent = tpFmt('projects.statsSparse', `${sc} 待补全`, { count: sc });
         } else {
             sparse.hidden = true;
         }
@@ -2504,10 +2507,10 @@ function formatProjectTime(t, fallback) {
     if (!d) return tp('projects.notUpdatedYet');
     const now = Date.now();
     const diff = now - d.getTime();
-    if (diff < 60000) return tp('common.justNow');
-    if (diff < 3600000) return tp('common.minutesAgo', { n: Math.floor(diff / 60000) });
-    if (diff < 86400000) return tp('common.hoursAgo', { n: Math.floor(diff / 3600000) });
-    if (diff < 604800000) return tp('common.daysAgo', { n: Math.floor(diff / 86400000) });
+    if (diff < 60000) return tpFmt('common.justNow', '刚刚');
+    if (diff < 3600000) return tpFmt('common.minutesAgo', `${Math.floor(diff / 60000)} 分钟前`, { n: Math.floor(diff / 60000) });
+    if (diff < 86400000) return tpFmt('common.hoursAgo', `${Math.floor(diff / 3600000)} 小时前`, { n: Math.floor(diff / 3600000) });
+    if (diff < 604800000) return tpFmt('common.daysAgo', `${Math.floor(diff / 86400000)} 天前`, { n: Math.floor(diff / 86400000) });
     return d.toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
