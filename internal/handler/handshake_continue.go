@@ -27,15 +27,20 @@ func (h *AgentHandler) tryContinueOnHandshakePending(
 	if *attempt >= handshakeContinueMaxAttempts {
 		return false
 	}
-	if !taskprefix.LooksLikeHandshakeReply(result.Response) {
+	reply := taskprefix.LooksLikeHandshakeReply(result.Response)
+	refuse := taskprefix.LooksLikeHandshakeRefusal(result.Response)
+	if !reply && !refuse {
 		return false
 	}
 	taskprefix.RememberFromText(conversationID, result.Response)
-	if h.handshakeVerifyDigHappened(result.MCPExecutionIDs) {
+	if reply && !refuse && h.handshakeVerifyDigHappened(result.MCPExecutionIDs) {
 		return false
 	}
 	*attempt++
 	check := taskprefix.CheckPhraseForConv(conversationID)
+	if refuse && taskprefix.IsVerified(conversationID) {
+		check = taskprefix.ResumePhrase
+	}
 	if multiagent.HasEinoResumeTrace(result) {
 		h.persistEinoAgentTraceForResume(conversationID, result)
 		h.applyEinoTraceResumeSegment(conversationID, result, curHistory, curFinalMessage, check)

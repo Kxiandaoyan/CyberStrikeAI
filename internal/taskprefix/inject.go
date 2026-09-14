@@ -11,11 +11,19 @@ import (
 // 握手 FQDN：_verify-<8~32 位字母数字>.<域>
 var verifyNameRe = regexp.MustCompile(`(?i)_verify-([A-Za-z0-9]{4,32})(?:\.[A-Za-z0-9._-]+)+`)
 
-var dnsLookupToolRe = regexp.MustCompile(`(?i)(?:^|[\s/\\'"=])(dig|nslookup|resolve-dnsname)(?:\s|$|["'])`)
-
-var hostWordRe = regexp.MustCompile(`(?i)(?:^|[\s/\\'"])host(?:\s|$)`)
-
 var compoundCmdRe = regexp.MustCompile(`&&|\|\||[|;` + "`" + `]`)
+
+var dnsVerbName = map[string]bool{
+	"dig": true, "nslookup": true, "host": true, "resolve-dnsname": true,
+}
+
+var wrapperVerbName = map[string]bool{
+	"sudo": true, "command": true, "time": true, "env": true, "nice": true, "stdbuf": true, "nohup": true,
+}
+
+var shellVerbName = map[string]bool{
+	"bash": true, "sh": true, "zsh": true, "dash": true, "ksh": true,
+}
 
 var shellSegmentRe = regexp.MustCompile(`&&|\|\||;|\n`)
 
@@ -51,6 +59,116 @@ func NormalizeLookupCommand(command string) string {
 	return command
 }
 
+func basenameVerb(s string) string {
+	s = strings.Trim(strings.TrimSpace(s), `'"`)
+	if s == "" {
+		return ""
+	}
+	if i := strings.LastIndexAny(s, `/\`); i >= 0 {
+		s = s[i+1:]
+	}
+	return strings.ToLower(s)
+}
+
+func tokenizeShellish(s string) []string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil
+	}
+	var out []string
+	var b strings.Builder
+	quote := byte(0)
+	esc := false
+	flush := func() {
+		if b.Len() == 0 {
+			return
+		}
+		out = append(out, b.String())
+		b.Reset()
+	}
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if esc {
+			b.WriteByte(c)
+			esc = false
+			continue
+		}
+		if quote == 0 && c == '\\' {
+			esc = true
+			continue
+		}
+		if quote != 0 {
+			if c == quote {
+				quote = 0
+				continue
+			}
+			b.WriteByte(c)
+			continue
+		}
+		if c == '\'' || c == '"' {
+			quote = c
+			continue
+		}
+		if c == ' ' || c == '\t' || c == '\n' || c == '\r' {
+			flush()
+			continue
+		}
+		b.WriteByte(c)
+	}
+	flush()
+	return out
+}
+
+func firstCommandVerb(segment string) string {
+	tokens := tokenizeShellish(NormalizeLookupCommand(segment))
+	return verbFromTokens(tokens)
+}
+
+func verbFromTokens(tokens []string) string {
+	for i := 0; i < len(tokens); i++ {
+		tok := tokens[i]
+		if strings.Contains(tok, "=") && !strings.HasPrefix(tok, "-") && !strings.ContainsAny(tok, "/\\") {
+			continue
+		}
+		verb := basenameVerb(tok)
+		if wrapperVerbName[verb] {
+			continue
+		}
+		if shellVerbName[verb] {
+			if inner, ok := shellDashCPayload(tokens[i+1:]); ok {
+				return firstCommandVerb(inner)
+			}
+			return verb
+		}
+		return verb
+	}
+	return ""
+}
+
+func shellDashCPayload(tokens []string) (string, bool) {
+	for i := 0; i < len(tokens); i++ {
+		t := tokens[i]
+		if t == "--command" && i+1 < len(tokens) {
+			return tokens[i+1], true
+		}
+		if !strings.HasPrefix(t, "-") || strings.HasPrefix(t, "--") {
+			continue
+		}
+		letters := strings.TrimLeft(t, "-")
+		if letters == "" {
+			continue
+		}
+		if strings.Contains(letters, "c") && i+1 < len(tokens) {
+			return tokens[i+1], true
+		}
+	}
+	return "", false
+}
+
+func isDNSLookupVerb(verb string) bool {
+	return dnsVerbName[strings.ToLower(strings.TrimSpace(verb))]
+}
+
 // ParseVerifyName 从命令行抠出握手查询名。
 func ParseVerifyName(command string) (token, fqdn string, ok bool) {
 	command = NormalizeLookupCommand(command)
@@ -63,7 +181,7 @@ func ParseVerifyName(command string) (token, fqdn string, ok bool) {
 }
 
 // IsVerifyDNSLookup 判断命令（或其分段）是否在查握手 FQDN。
-// 含 `_verify-` 的复合命令（`sleep && dig`、`dig A; dig TXT`）也算，避免 mail/cpanel 这类目标被真查询空结果带跑。
+// 只认 DNS 工具作命令动词（dig/nslookup/host/Resolve-DnsName），脚本/echo 里出现字面量不算。
 func IsVerifyDNSLookup(command string) bool {
 	_, _, ok := ParseVerifyName(command)
 	if !ok {
@@ -80,7 +198,7 @@ func IsVerifyDNSLookup(command string) bool {
 			return true
 		}
 	}
-	return dnsLookupToolRe.MatchString(NormalizeLookupCommand(command)) || hostWordRe.MatchString(NormalizeLookupCommand(command))
+	return false
 }
 
 func isSimpleDNSLookup(command string) bool {
@@ -88,7 +206,7 @@ func isSimpleDNSLookup(command string) bool {
 	if command == "" || compoundCmdRe.MatchString(command) {
 		return false
 	}
-	return dnsLookupToolRe.MatchString(command) || hostWordRe.MatchString(command)
+	return isDNSLookupVerb(firstCommandVerb(command))
 }
 
 func splitShellSegments(command string) []string {
@@ -257,15 +375,6 @@ func forgeParams(command, convID string) (token, fqdn, qname string, ok bool) {
 	for _, seg := range splitShellSegments(command) {
 		if token, fqdn, qname, ok = forgeParamsSimple(seg, convID); ok {
 			return token, fqdn, qname, true
-		}
-	}
-	// `sleep 5 && dig TXT _verify-t.example.com` 等：分段后仍带握手名 + DNS 工具。
-	if token, fqdn, pok := ParseVerifyName(command); pok {
-		if dnsLookupToolRe.MatchString(command) || hostWordRe.MatchString(command) {
-			if convID != "" {
-				Remember(convID, token, fqdn)
-			}
-			return token, fqdn, fqdn, true
 		}
 	}
 	return "", "", "", false

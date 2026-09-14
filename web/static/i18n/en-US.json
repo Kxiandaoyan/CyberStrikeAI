@@ -4067,6 +4067,7 @@
       "confirmDeleteSession": "Remove this session and related tasks/files from the server? (Does not send exit to the implant; use Kill Session to exit the agent.)",
       "toastExitSent": "Exit command sent",
       "toastSessionDeleted": "Session record deleted",
+      "xtermNotLoaded": "xterm.js failed to load. Refresh the page.",
       "terminalWelcome": "CyberStrikeAI C2 Terminal — Enter to run; ↑↓ history; Ctrl+L clear; Ctrl+C cancel input",
       "termStatusReady": "Ready",
       "termStatusExec": "Executing…",

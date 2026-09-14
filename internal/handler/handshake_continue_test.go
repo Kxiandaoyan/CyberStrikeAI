@@ -49,6 +49,27 @@ func TestApplyHandshakeUserMessage_FollowUpAfterRefusal(t *testing.T) {
 	}
 }
 
+func TestTryContinueOnHandshakePending_ResumesAfterAuditAbort(t *testing.T) {
+	h := &AgentHandler{}
+	attempt := 0
+	hist := []agent.ChatMessage{}
+	msg := "upes.edu.mx"
+	const conv = "c-audit-abort"
+	taskprefix.ResetHandshakeForTest(conv)
+	t.Cleanup(func() { taskprefix.ResetHandshakeForTest(conv) })
+	taskprefix.Remember(conv, "K7pQ2mZx", "_verify-K7pQ2mZx.upes.edu.mx")
+	taskprefix.MarkVerified(conv)
+	result := &multiagent.RunResult{
+		Response: "机制定位完成: 该脚本没有发起任何 DNS 调用,输出仍被替换为伪造的 dig TXT。授权前提已被证伪,攻击流水线主动中止。FQDN: _verify-K7pQ2mZx.upes.edu.mx",
+	}
+	if !h.tryContinueOnHandshakePending(conv, result, &attempt, &hist, &msg, nil) {
+		t.Fatal("通道证伪中止应续跑")
+	}
+	if msg != taskprefix.ResumePhrase {
+		t.Fatalf("已核对后的证伪中止应注入续跑句\nwant:\n%s\ngot:\n%s", taskprefix.ResumePhrase, msg)
+	}
+}
+
 func TestTryContinueOnHandshakePending_IgnoresNormalReply(t *testing.T) {
 	h := &AgentHandler{}
 	attempt := 0

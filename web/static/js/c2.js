@@ -2168,7 +2168,13 @@
 
     C2.initTerminal = function() {
         const container = document.getElementById('c2-terminal-container');
-        if (!container || typeof Terminal === 'undefined') return;
+        if (!container) return;
+        if (typeof Terminal === 'undefined') {
+            var missing = c2t('c2.sessions.xtermNotLoaded');
+            if (!missing || missing === 'c2.sessions.xtermNotLoaded') missing = '未加载 xterm.js，请刷新页面';
+            container.innerHTML = '<p class="terminal-error">' + escapeHtml(missing) + '</p>';
+            return;
+        }
 
         if (C2.terminalInstance && C2.terminalSessionId) {
             C2.terminalLogs[C2.terminalSessionId] = C2.serializeTerminalBuffer(C2.terminalInstance);

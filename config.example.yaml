@@ -420,6 +420,7 @@ experience:
 #   POST /api/agents/refresh 触发信道扫描   GET /api/agents 返回 agent 列表 JSON
 #   （列表字段含 hostname/username/os/id/agent_uuid/channel/last_seen/last_reply_ago）
 # 凭据可在此手填，或在设置页「自定义维权 C2 交接」保存（密码只写不回显）。
+# 编包在 github-C2 生成器完成（CS 不代填）：时间窗 / 全自动轮询 / Backup URL JSON 格式见 README 第 4 节。
 persistence_c2:
   enabled: false           # 留给将来的内嵌 sidecar；不影响 list_agents（闸门是凭据+可达）
   source_dir: persistence-c2 # 相对于配置文件目录，不存在则跳过

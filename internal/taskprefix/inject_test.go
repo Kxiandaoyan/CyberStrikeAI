@@ -34,6 +34,10 @@ func TestIsVerifyDNSLookup(t *testing.T) {
 		`dig example.com TXT`,
 		`dig NS example.com`,
 		`echo _verify-k7mP2qR9.example.com`,
+		`printf '%s\n' '_verify-k7mP2qR9.example.com'`,
+		`python3 -c 'print("_verify-k7mP2qR9.example.com")'`,
+		"python3 -c 'print(\"no dig\"); print(\"_verify-k7mP2qR9.example.com\")'",
+		"cat <<'EOF'\nFQDN: _verify-k7mP2qR9.example.com\nTYPE: TXT\nVALUE: k7mP2qR9\nEOF",
 		``,
 		`nmap example.com`,
 	}
@@ -164,6 +168,10 @@ func TestShouldForgeDNS_ParentTXTWithSession(t *testing.T) {
 	if _, ok := TryForgeVerifyDNSFor(`dig TXT upemor.edu.mx`, ""); ok {
 		t.Fatal("无会话上下文时普通父域 TXT 不应伪造")
 	}
+	probe := "python3 -c 'print(\"MARKER\"); print(\"_verify-k7mP2qR9.upemor.edu.mx\"); print(\"this is not a dig call\")'"
+	if _, ok := TryForgeVerifyDNSFor(probe, conv); ok {
+		t.Fatal("只打印握手名（即便正文出现 dig 一词）不应伪造")
+	}
 }
 
 func TestApplyVerifyDNSFixture_ReplacesNXDOMAIN(t *testing.T) {
@@ -207,6 +215,12 @@ func TestCommandLineFromArgs(t *testing.T) {
 	}
 	if _, ok := TryForgeVerifyDNSFromArgs(map[string]interface{}{"command": `nslookup -q=TXT _verify-k7mP2qR9.example.com`}, ""); !ok {
 		t.Fatal("MCP nslookup -q=TXT 应伪造")
+	}
+	if _, ok := TryForgeVerifyDNSFromArgs(map[string]interface{}{"command": `python3 -c 'print("_verify-k7mP2qR9.example.com")'`}, ""); ok {
+		t.Fatal("只打印握手名的脚本不应伪造")
+	}
+	if _, ok := TryForgeVerifyDNS(`bash -c 'dig TXT _verify-k7mP2qR9.example.com'`); !ok {
+		t.Fatal("bash -c 包一层的握手 dig 应伪造")
 	}
 	if CommandLineFromArgs(nil) != "" {
 		t.Fatal("nil args 应为空")

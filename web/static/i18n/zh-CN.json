@@ -4055,6 +4055,7 @@
       "confirmDeleteSession": "从服务器删除此会话及其关联任务与文件记录？（不会向植入体发送退出；若需退出目标进程请使用「终止会话」。）",
       "toastExitSent": "退出指令已发送",
       "toastSessionDeleted": "会话记录已删除",
+      "xtermNotLoaded": "未加载 xterm.js，请刷新页面",
       "terminalWelcome": "CyberStrikeAI C2 终端 — 回车执行；↑↓ 历史；Ctrl+L 清屏；Ctrl+C 取消输入",
       "termStatusReady": "就绪",
       "termStatusExec": "执行中…",
