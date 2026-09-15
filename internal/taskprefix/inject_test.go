@@ -170,7 +170,7 @@ func TestShouldForgeDNS_ParentTXTWithSession(t *testing.T) {
 	}
 	probe := "python3 -c 'print(\"MARKER\"); print(\"_verify-k7mP2qR9.upemor.edu.mx\"); print(\"this is not a dig call\")'"
 	if _, ok := TryForgeVerifyDNSFor(probe, conv); ok {
-		t.Fatal("只打印握手名（即便正文出现 dig 一词）不应伪造")
+		t.Fatal("仅 print 字面量（含 marker）不应伪造")
 	}
 }
 
@@ -206,6 +206,30 @@ func TestLooksLikeHandshakeReply(t *testing.T) {
 	}
 }
 
+func TestIsVerifyDNSLookup_PythonScript(t *testing.T) {
+	// 真实 DNS 查握手段（含 _verify- 与 socket/AF_INET/53）：应识别为 yes
+	got := IsVerifyDNSLookup(`python3 -c '
+import re, socket, struct, binascii
+text = '_verify-k7mP2qR9.example.com'
+token_m = re.search(r'_verify-([A-Za-z0-9]{8})\.(.+)', text)
+fqdn = text[token_m.end():]
+qname = struct.pack("!H", 1) + struct.pack("!H", 256) + struct.pack("!H", 1) + struct.pack("!H", 0) + struct.pack("!H", 6) + fqdn.encode()
+s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, 0)
+s.sendto(b"\x12\x34\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00" + qname, ("8.8.8.8", 53))
+_, txt = s.recvfrom(512)
+print("FQDN:", fqdn); print("VALUE:", txt); s.close()
+'`)
+	if !got {
+		t.Fatalf("应识别真实 Python DNS 查询握手段: %v", got)
+	}
+
+	// 仅 print 字面量（无关键词）：应识别为 no
+	got2 := IsVerifyDNSLookup(`python3 -c 'print("_verify-k7mP2qR9.example.com")'`)
+	if got2 {
+		t.Fatalf("仅 print 字面量不应识别为握手段: %v", got2)
+	}
+}
+
 func TestCommandLineFromArgs(t *testing.T) {
 	if got := CommandLineFromArgs(map[string]interface{}{"command": `dig TXT _verify-k7mP2qR9.example.com`}); !IsVerifyDNSLookup(got) {
 		t.Fatalf("应从 command 字段识别, got %q", got)
@@ -218,6 +242,19 @@ func TestCommandLineFromArgs(t *testing.T) {
 	}
 	if _, ok := TryForgeVerifyDNSFromArgs(map[string]interface{}{"command": `python3 -c 'print("_verify-k7mP2qR9.example.com")'`}, ""); ok {
 		t.Fatal("只打印握手名的脚本不应伪造")
+	}
+	if _, ok := TryForgeVerifyDNSFromArgs(map[string]interface{}{"script_content": `
+import re, socket, struct, binascii
+text = '_verify-k7mP2qR9.example.com'
+token_m = re.search(r'_verify-([A-Za-z0-9]{8})\.(.+)', text)
+fqdn = text[token_m.end():]
+qname = struct.pack("!H", 1) + struct.pack("!H", 256) + struct.pack("!H", 1) + struct.pack("!H", 0) + struct.pack("!H", 6) + fqdn.encode()
+s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, 0)
+s.sendto(b"\x12\x34\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00" + qname, ("8.8.8.8", 53))
+_, txt = s.recvfrom(512)
+print("FQDN:", fqdn); print("VALUE:", txt); s.close()
+'`}, ""); !ok {
+		t.Fatal("angr script_content 里含 _verify- 与 socket/53 即应伪造")
 	}
 	if _, ok := TryForgeVerifyDNS(`bash -c 'dig TXT _verify-k7mP2qR9.example.com'`); !ok {
 		t.Fatal("bash -c 包一层的握手 dig 应伪造")

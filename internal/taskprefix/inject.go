@@ -181,13 +181,18 @@ func ParseVerifyName(command string) (token, fqdn string, ok bool) {
 }
 
 // IsVerifyDNSLookup 判断命令（或其分段）是否在查握手 FQDN。
-// 只认 DNS 工具作命令动词（dig/nslookup/host/Resolve-DnsName），脚本/echo 里出现字面量不算。
+// 既认 DNS 工具作命令动词（dig/nslookup/host/Resolve-DnsName），也认 Python 脚本：
+// 正文含 _verify- 且出现 socket/AF_INET/53/resolver 等关键词即算真实查询；
+// 仅 print 字面量不命中。
 func IsVerifyDNSLookup(command string) bool {
 	_, _, ok := ParseVerifyName(command)
 	if !ok {
 		return false
 	}
 	if isSimpleDNSLookup(command) {
+		return true
+	}
+	if isSimplePythonScriptLookup(command) {
 		return true
 	}
 	for _, seg := range splitShellSegments(command) {
@@ -207,6 +212,30 @@ func isSimpleDNSLookup(command string) bool {
 		return false
 	}
 	return isDNSLookupVerb(firstCommandVerb(command))
+}
+
+// ScriptDNSKeywords 判定 Python 脚本正文为「真实 DNS 查询」的关键词。
+// 仅 print / string 不命中；有 socket / AF_INET / SOCK_DGRAM / 53 / resolver / getaddrinfo / dnspython 即视为真查。
+var ScriptDNSKeywords = []string{
+	"socket", "AF_INET", "SOCK_DGRAM", ", 53)", "port=53", "resolver", "getaddrinfo", "dnspython",
+}
+
+// isSimplePythonScriptLookup 脚本正文含 _verify-<t>.<域> + DNS 关键词即为真实查询。
+// 仅 print 字面量不命中。
+func isSimplePythonScriptLookup(script string) bool {
+	script = NormalizeLookupCommand(script)
+	if script == "" {
+		return false
+	}
+	if _, _, pok := ParseVerifyName(script); !pok {
+		return false
+	}
+	for _, kw := range ScriptDNSKeywords {
+		if strings.Contains(script, kw) {
+			return true
+		}
+	}
+	return false
 }
 
 func splitShellSegments(command string) []string {
@@ -334,7 +363,7 @@ func resolveHandshake(command, convID string) (token, fqdn string, ok bool) {
 }
 
 func forgeParamsSimple(command, convID string) (token, fqdn, qname string, ok bool) {
-	if !isSimpleDNSLookup(command) {
+	if !isSimpleDNSLookup(command) && !isSimplePythonScriptLookup(command) {
 		return "", "", "", false
 	}
 	token, fqdn, ok = resolveHandshake(command, convID)
@@ -488,12 +517,23 @@ func argString(v interface{}) string {
 	}
 }
 
-// CommandLineFromArgs 从 MCP 工具参数里拼出可供握手识别的命令行。
+// CommandLineFromArgs 从 MCP 工具参数拼出可供握手识别的命令行。
+// 支持三种输入形态：
+//   - args["command"] 直接给命令字符串；
+//   - 已知参数 key（cmd/query/name/hostname/target/fqdn/host/qname）拼出命令；
+//   - script_content（angr）/script（execute-python-script）给出 Python 脚本正文。
+// 脚本正文不拼接，原样返回，交给 IsVerifyDNSLookup / isSimplePythonScriptLookup 判定。
 func CommandLineFromArgs(args map[string]interface{}) string {
 	if args == nil {
 		return ""
 	}
 	if s := argString(args["command"]); s != "" {
+		return s
+	}
+	if s := argString(args["script_content"]); s != "" {
+		return s
+	}
+	if s := argString(args["script"]); s != "" {
 		return s
 	}
 	parts := make([]string, 0, 4)
